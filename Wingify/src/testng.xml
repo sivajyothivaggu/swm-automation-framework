@@ -1,0 +1,8 @@
+<!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd" >
+<suite name="DreamPortal Suite">
+    <test name="DreamPortal Test">
+        <classes>
+            <class name="TestNG.DreamPortalAutomationTest" />
+        </classes>
+    </test>
+</suite>
