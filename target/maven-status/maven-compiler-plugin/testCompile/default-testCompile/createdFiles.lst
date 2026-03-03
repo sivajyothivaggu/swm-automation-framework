@@ -1,0 +1,16 @@
+com\swm\tests\api\RouteAPITest.class
+com\swm\tests\ui\transport\VehicleManagement\HaltedVehicles\HaltedVehiclesTest.class
+com\swm\tests\api\VehicleAPITest.class
+com\swm\tests\ui\transport\geofencing\GeoFencingTest.class
+com\swm\tests\ui\transport\vehiclemaster\VehicleMasterManagementTest.class
+com\swm\tests\ui\transport\route\RouteManagementTest.class
+com\swm\tests\integration\RouteEndToEndTest.class
+com\swm\tests\ui\transport\VehicleManagement\IdleVehicles\IdleVehiclesTest.class
+com\swm\tests\api\AuthAPITest.class
+com\swm\tests\api\TransportAPITest.class
+com\swm\tests\integration\VehicleEndToEndTest.class
+com\swm\tests\ui\transport\TransportNavigationTest.class
+com\swm\tests\ui\transport\repaired\RepairedVehiclesTest.class
+com\swm\tests\ui\auth\LoginTest.class
+com\swm\tests\ui\auth\DataDrivenTest.class
+com\swm\tests\ui\transport\VehicleManagement\ActiveVehicles\ActiveVehiclesTest.class

@@ -1,0 +1,15 @@
+username,password,expectedResult
+swmadmin,Admin@123,valid
+swmadmin,admin@123,invalid
+swmadmin,ADMIN@123,invalid
+SWMADMIN,Admin@123,invalid
+swmadmin,Admin@1234,invalid
+swmadmin,Admin@12,invalid
+swmadmin,Admin123,invalid
+swmadmin,@Admin123,invalid
+swmadmin,123456,invalid
+123456,Admin@123,invalid
+testuser,Test@123,invalid
+invaliduser,Admin@123,invalid
+swmadmin,wrongpass,invalid
+admin@test,test123,invalid

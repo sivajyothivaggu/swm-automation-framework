@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
+<suite name="Failed suite [Surefire suite]" verbose="0">
+  <test thread-count="5" name="Surefire test(failed)" verbose="0">
+    <classes>
+      <class name="com.swm.tests.ui.transport.VehicleManagement.TotalVehicles.TotalVehiclesTest">
+        <methods>
+          <include name="tearDown"/>
+          <include name="testAllFiltersCombined"/>
+          <include name="testFilterByWard"/>
+          <include name="testMultipleFilters_DateRangeAndStatus"/>
+          <include name="testPartialSearch"/>
+          <include name="testFilterByVehicleType"/>
+          <include name="testSearchByDriverName"/>
+          <include name="testFilterByDepartment"/>
+          <include name="testSearchByPhoneNumber"/>
+          <include name="testInvalidSearch"/>
+          <include name="testFilterAutomationFlow"/>
+          <include name="navigateToTotalVehicles"/>
+          <include name="testClearAllFunctionality"/>
+          <include name="testSearchByVehicleNumber"/>
+          <include name="setUp"/>
+          <include name="testFilterByVehicleType_TRACTOR"/>
+          <include name="testMultipleFilters_StatusAndWard"/>
+          <include name="testSpecialCharactersInSearch"/>
+          <include name="testMultipleFilters_VehicleTypeAndStatus"/>
+          <include name="testFilterByStatus"/>
+          <include name="testEmptySearch"/>
+          <include name="testFilterByDateRange"/>
+        </methods>
+      </class> <!-- com.swm.tests.ui.transport.VehicleManagement.TotalVehicles.TotalVehiclesTest -->
+    </classes>
+  </test> <!-- Surefire test(failed) -->
+</suite> <!-- Failed suite [Surefire suite] -->
