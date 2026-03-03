@@ -1,8 +1,0 @@
-target/
-*.log
-*.class
-.vscode/
-.idea/
-.DS_Store
-test-output/
-surefire-reports/
