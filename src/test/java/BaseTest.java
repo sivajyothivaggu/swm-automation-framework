@@ -1,13 +1,11 @@
-package com.swm.core.base;
+package com.swm.core.base
 
-import org.testng.annotations.*;
-import com.swm.core.driver.DriverManager;
-import com.swm.core.config.ConfigManager;
 
-public class BaseTest {
+
+public class BaseTest 
     
     @BeforeMethod
-    public void setUp() throws InterruptedException {
+    public void setUp() throws InterruptedException 
         DriverManager.initDriver(ConfigManager.getBrowser());
         DriverManager.getDriver().manage().timeouts().pageLoadTimeout(java.time.Duration.ofSeconds(120));
         int retries = 3;
