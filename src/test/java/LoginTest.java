@@ -4,17 +4,16 @@ import org.testng.annotations.Test;
 import com.swm.core.base.BaseTest;
 import com.swm.ui.pages.auth.LoginPage;
 import com.swm.ui.pages.auth.LogoutPopupPage;
-import com.swm.ui.pages.dashboard.DashboardPage;
-import static org.testng.Assert.*;
 
-public class LoginTest extends BaseTest {
+
+public class LoginTest extends BaseTest 
     
     @Test
-    public void testValidLogin() {
-        LoginPage loginPage = new LoginPage();
-        loginPage.login("swmadmin", "Admin@123");
+    public void testValidLogin
+        LoginPage loginPage = new LoginPage()
+        loginPage.login("swmadmin", "Admin@123")
         
-        DashboardPage dashboardPage = new DashboardPage();
+        DashboardPage dashboardPage = new DashboardPage()
         
         // Step 1: Wait and verify dashboard is loaded
         dashboardPage.waitForDashboardLoad();
