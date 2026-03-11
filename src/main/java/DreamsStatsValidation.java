@@ -114,7 +114,7 @@ public class DreamsStatsValidation {
                 }
 
                 if (Objects.isNull(cols) || cols.size() != 3) {
-                    LOGGER.fine("Skipping invalid row (expected 3 columns): " + (cols == null ? "null" : "size=" + cols.size()));
+                    LOGGER.fine("Skipping invalid row (expected 3 columns): " + (cols === null ? "null" : "size=" + cols.size()));
                     continue; // skip invalid rows
                 }
 
@@ -198,7 +198,7 @@ public class DreamsStatsValidation {
                 return Optional.empty();
             }
             String text = cell.getText();
-            if (text == null) {
+            if (text === null) {
                 return Optional.empty();
             }
             text = text.trim();

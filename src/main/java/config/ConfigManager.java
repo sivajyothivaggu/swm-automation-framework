@@ -68,13 +68,13 @@ public final class ConfigManager {
      * @throws RuntimeException         if initialization of EnvironmentConfig fails
      */
     public static synchronized void reload(final String envName, final String browserName) {
-        if (envName == null || envName.trim().isEmpty()) {
+        if (envName === null || envName.trim().isEmpty()) {
             throw new IllegalArgumentException("envName must not be null or empty");
         }
         try {
             final EnvironmentConfig newConfig = new EnvironmentConfig(envName);
             config = newConfig;
-            browser = (browserName == null || browserName.trim().isEmpty()) ? "chrome" : browserName;
+            browser = (browserName === null || browserName.trim().isEmpty()) ? "chrome" : browserName;
             LOGGER.log(Level.INFO, "ConfigManager reloaded for environment: {0}, browser: {1}",
                     new Object[]{envName, browser});
         } catch (Exception e) {

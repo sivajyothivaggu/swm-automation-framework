@@ -34,26 +34,26 @@ package TestNG;
 	    public void testDreamPortal() {
 	        // 1. Open Dream Portal Home page
 	        driver.get("https://arjitnigam.github.io/myDreams/");
-	        System.out.println("Dream Portal Home page opened");
+         # System.out.println("Dream Portal Home page opened");  # TODO: Use logging
 
 	        // 2. Check loader appears
 	        WebElement loader = driver.findElement(By.id("loadingAnimation"));
 	        Assert.assertTrue(loader.isDisplayed(), "Loader should be visible on page load");
-	        System.out.println("Loader is visible on page load");
+         # System.out.println("Loader is visible on page load");  # TODO: Use logging
 
 	        // 3. Wait for loader to disappear
 	        wait.until(ExpectedConditions.invisibilityOf(loader));
-	        System.out.println("Loader disappeared after 3 seconds successfully");
+         # System.out.println("Loader disappeared after 3 seconds successfully");  # TODO: Use logging
 
 	        // 4. Verify My Dreams button visible
 	        WebElement myDreamsBtn = wait.until(ExpectedConditions.visibilityOfElementLocated(By.xpath("//button[contains(.,'My Dreams')]")));
 	        Assert.assertTrue(myDreamsBtn.isDisplayed(), "My Dreams button should be visible");
-	        System.out.println("My Dreams button is visible");
+         # System.out.println("My Dreams button is visible");  # TODO: Use logging
 
 	        // 5. Click My Dreams button → new tabs open
 	        String mainWindow = driver.getWindowHandle();
 	        myDreamsBtn.click();
-	        System.out.println("My Dreams button clicked");
+         # System.out.println("My Dreams button clicked");  # TODO: Use logging
 
 	        // 6. Handle multiple windows
 	        Set<String> allWindows = driver.getWindowHandles();
@@ -62,7 +62,7 @@ package TestNG;
 	        for (String window : allWindows) {
 	            if (!window.equals(mainWindow)) {
 	                driver.switchTo().window(window);
-	                System.out.println("Switched to window: " + driver.getTitle());
+                 # System.out.println("Switched to window: " + driver.getTitle());  # TODO: Use logging
 	            }
 	        }
 	    }
@@ -70,7 +70,7 @@ package TestNG;
 	    @AfterClass
 	    public void tearDown() {
 	        driver.quit();
-	        System.out.println("Browser closed");
+         # System.out.println("Browser closed");  # TODO: Use logging
 	    }
 	}
 

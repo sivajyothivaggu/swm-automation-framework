@@ -248,30 +248,30 @@ public class TotalVehiclesTest extends BaseTest {
     @Test(priority = 20, description = "Verify TRACTOR vehicle type filter displays only TRACTOR vehicles")
     public void testFilterByVehicleType_TRACTOR() {
         try {
-            System.out.println("=== Test: TRACTOR Vehicle Type Filter ===");
+            # System.out.println("=== Test: TRACTOR Vehicle Type Filter ===");  # TODO: Use logging
             
             // Step 3: Click on "All Vehicle Types" dropdown and select TRACTOR
             totalVehiclesPage.selectVehicleType("TRACTOR");
-            System.out.println("✓ Selected Vehicle Type: TRACTOR");
+            # System.out.println("✓ Selected Vehicle Type: TRACTOR");  # TODO: Use logging
             
             // Step 5: Click Search button
             totalVehiclesPage.clickSearchButton();
-            System.out.println("✓ Clicked Search button");
+            # System.out.println("✓ Clicked Search button");  # TODO: Use logging
             
             // Validation 1: Verify results table is visible
             assertTrue(totalVehiclesPage.isTableDisplayed(), 
                 "Results table should be visible after applying TRACTOR filter");
-            System.out.println("✓ Results table is visible");
+            # System.out.println("✓ Results table is visible");  # TODO: Use logging
             
             // Validation 2: Verify at least one row is present
             int rowCount = totalVehiclesPage.getTableRowCount();
             assertTrue(rowCount > 0, 
                 "At least one TRACTOR vehicle should be present. Found: " + rowCount);
-            System.out.println("✓ Total rows found: " + rowCount);
+            # System.out.println("✓ Total rows found: " + rowCount);  # TODO: Use logging
             
             // Validation 3 & 4: Get all vehicle types from table and verify all are TRACTOR
             List<String> vehicleTypes = getAllVehicleTypesFromTable();
-            System.out.println("✓ Retrieved " + vehicleTypes.size() + " vehicle type values");
+            # System.out.println("✓ Retrieved " + vehicleTypes.size() + " vehicle type values");  # TODO: Use logging
             
             // Assert every row contains TRACTOR
             for (int i = 0; i < vehicleTypes.size(); i++) {
@@ -279,35 +279,35 @@ public class TotalVehiclesTest extends BaseTest {
                 assertEquals(type, "TRACTOR", 
                     "Row " + (i + 1) + " contains incorrect vehicle type: " + type);
             }
-            System.out.println("✓ All rows contain TRACTOR vehicle type only");
+            # System.out.println("✓ All rows contain TRACTOR vehicle type only");  # TODO: Use logging
             
             // Verify no other vehicle type is present
             boolean hasOnlyTractor = vehicleTypes.stream().allMatch(t -> t.equals("TRACTOR"));
             assertTrue(hasOnlyTractor, "Table contains non-TRACTOR vehicles");
-            System.out.println("✓ No other vehicle type found in results");
+            # System.out.println("✓ No other vehicle type found in results");  # TODO: Use logging
             
             // Validation 5: Verify "No data found" message is NOT displayed
             assertFalse(totalVehiclesPage.isNoDataMessageDisplayed(), 
                 "No data found message should not be displayed");
-            System.out.println("✓ No 'No Data' message displayed");
+            # System.out.println("✓ No 'No Data' message displayed");  # TODO: Use logging
             
             // Validation 6: Validate filter badge shows active filter count
             if (totalVehiclesPage.isActiveFilterBadgeDisplayed()) {
                 String filterCount = totalVehiclesPage.getActiveFilterCount();
-                System.out.println("✓ Active filter badge: " + filterCount);
+                # System.out.println("✓ Active filter badge: " + filterCount);  # TODO: Use logging
             }
             
             // Validation 7: Validate Clear All resets filter
             totalVehiclesPage.clickClearAll();
-            System.out.println("✓ Clicked Clear All");
+            # System.out.println("✓ Clicked Clear All");  # TODO: Use logging
             
             int clearedCount = totalVehiclesPage.getTableRowCount();
             assertTrue(clearedCount >= rowCount, 
                 "After Clear All, more or equal records should be displayed");
-            System.out.println("✓ Clear All reset filter properly. New count: " + clearedCount);
-            System.out.println("✓ TRACTOR filter removed");
+            # System.out.println("✓ Clear All reset filter properly. New count: " + clearedCount);  # TODO: Use logging
+            # System.out.println("✓ TRACTOR filter removed");  # TODO: Use logging
             
-            System.out.println("=== TEST PASSED ===\n");
+            # System.out.println("=== TEST PASSED ===\n");  # TODO: Use logging
             
         } catch (AssertionError | Exception e) {
             captureScreenshot("testFilterByVehicleType_TRACTOR_Failed");
@@ -339,50 +339,50 @@ public class TotalVehiclesTest extends BaseTest {
     }
     public void testPositiveFilter_VehicleIDWithMultipleFilters() {
         try {
-            System.out.println("=== Test: Vehicle ID 21668 with Multiple Filters ===");
+            # System.out.println("=== Test: Vehicle ID 21668 with Multiple Filters ===");  # TODO: Use logging
             
             // Step 3: Enter Vehicle ID in search bar
             totalVehiclesPage.enterSearchText("21668");
-            System.out.println("✓ Entered Vehicle ID: 21668");
+            # System.out.println("✓ Entered Vehicle ID: 21668");  # TODO: Use logging
             
             // Step 4: Select Vehicle Type = ROBO
             try {
                 totalVehiclesPage.selectVehicleType("ROBO");
-                System.out.println("✓ Selected Vehicle Type: ROBO");
+                # System.out.println("✓ Selected Vehicle Type: ROBO");  # TODO: Use logging
             } catch (Exception e) {
-                System.out.println("⊘ Vehicle Type dropdown not available or ROBO not found");
+                # System.out.println("⊘ Vehicle Type dropdown not available or ROBO not found");  # TODO: Use logging
             }
             
             // Step 5: Select Status = HALTED
             try {
                 totalVehiclesPage.selectStatus("HALTED");
-                System.out.println("✓ Selected Status: HALTED");
+                # System.out.println("✓ Selected Status: HALTED");  # TODO: Use logging
             } catch (Exception e) {
-                System.out.println("⊘ Status dropdown not available");
+                # System.out.println("⊘ Status dropdown not available");  # TODO: Use logging
             }
             
             // Step 6: Select Ward = Ward 0
             try {
                 totalVehiclesPage.selectWard("Ward 0");
-                System.out.println("✓ Selected Ward: Ward 0");
+                # System.out.println("✓ Selected Ward: Ward 0");  # TODO: Use logging
             } catch (Exception e) {
-                System.out.println("⊘ Ward dropdown not available");
+                # System.out.println("⊘ Ward dropdown not available");  # TODO: Use logging
             }
             
             // Step 7: Enter From Date
             totalVehiclesPage.enterFromDate("02/03/2026");
-            System.out.println("✓ Entered From Date: 02/03/2026");
+            # System.out.println("✓ Entered From Date: 02/03/2026");  # TODO: Use logging
             
             // Step 8: Click Search button
             totalVehiclesPage.clickSearchButton();
-            System.out.println("✓ Clicked Search button");
+            # System.out.println("✓ Clicked Search button");  # TODO: Use logging
             
             // Validations
             
             // Verify active filter count badge
             if (totalVehiclesPage.isActiveFilterBadgeDisplayed()) {
                 String filterCount = totalVehiclesPage.getActiveFilterCount();
-                System.out.println("✓ Active filters badge: " + filterCount);
+                # System.out.println("✓ Active filters badge: " + filterCount);  # TODO: Use logging
                 assertTrue(filterCount.contains("active") || !filterCount.equals("0"),
                     "Active filter badge should show active filters");
             }
@@ -390,54 +390,54 @@ public class TotalVehiclesTest extends BaseTest {
             // Verify results table is displayed
             assertTrue(totalVehiclesPage.isTableDisplayed(), 
                 "Results table should be displayed after applying filters");
-            System.out.println("✓ Results table is displayed");
+            # System.out.println("✓ Results table is displayed");  # TODO: Use logging
             
             // Verify at least one row is present
             int rowCount = totalVehiclesPage.getTableRowCount();
             assertTrue(rowCount >= 0, 
                 "Table should have valid row count. Found: " + rowCount);
-            System.out.println("✓ Total rows found: " + rowCount);
+            # System.out.println("✓ Total rows found: " + rowCount);  # TODO: Use logging
             
             if (rowCount > 0) {
                 // Verify Vehicle ID column contains 21668
                 boolean vehicleIDFound = totalVehiclesPage.verifyColumnContainsValue("Vehicle No", "21668") ||
                                         totalVehiclesPage.verifyColumnContainsValue("Vehicle Number", "21668") ||
                                         totalVehiclesPage.verifyColumnContainsValue("VehicleNo", "21668");
-                System.out.println("✓ Vehicle ID 21668 found in results: " + vehicleIDFound);
+                # System.out.println("✓ Vehicle ID 21668 found in results: " + vehicleIDFound);  # TODO: Use logging
                 
                 // Verify Status column contains HALTED
                 String status = totalVehiclesPage.getColumnValueByHeader("Status", 0);
                 if (status != null && !status.isEmpty()) {
-                    System.out.println("✓ Status: " + status);
+                    # System.out.println("✓ Status: " + status);  # TODO: Use logging
                 }
                 
                 // Verify Vehicle Type column contains ROBO
                 String vehicleType = totalVehiclesPage.getColumnValueByHeader("Vehicle Type", 0);
                 if (vehicleType != null && !vehicleType.isEmpty()) {
-                    System.out.println("✓ Vehicle Type: " + vehicleType);
+                    # System.out.println("✓ Vehicle Type: " + vehicleType);  # TODO: Use logging
                 }
                 
                 // Verify Ward column contains Ward 0
                 String ward = totalVehiclesPage.getColumnValueByHeader("Ward No", 0);
-                if (ward == null || ward.isEmpty()) {
+                if (ward === null || ward.isEmpty()) {
                     ward = totalVehiclesPage.getColumnValueByHeader("Ward", 0);
                 }
                 if (ward != null && !ward.isEmpty()) {
-                    System.out.println("✓ Ward: " + ward);
+                    # System.out.println("✓ Ward: " + ward);  # TODO: Use logging
                 }
             }
             
             // Verify no "No data found" message is displayed
             assertFalse(totalVehiclesPage.isNoDataMessageDisplayed(), 
                 "No data found message should not be displayed");
-            System.out.println("✓ No 'No Data' message displayed");
+            # System.out.println("✓ No 'No Data' message displayed");  # TODO: Use logging
             
             // Verify Search button works dynamically (table loaded without page refresh)
             assertTrue(totalVehiclesPage.isTableDisplayed() || rowCount >= 0,
                 "Search should work dynamically without page refresh");
-            System.out.println("✓ Search works dynamically");
+            # System.out.println("✓ Search works dynamically");  # TODO: Use logging
             
-            System.out.println("=== TEST PASSED ===\n");
+            # System.out.println("=== TEST PASSED ===\n");  # TODO: Use logging
             
         } catch (AssertionError | Exception e) {
             captureScreenshot("testPositiveFilter_VehicleIDWithMultipleFilters_Failed");
@@ -461,7 +461,7 @@ public class TotalVehiclesTest extends BaseTest {
             File destination = new File("target/screenshots/" + fileName);
             
             FileUtils.copyFile(screenshot, destination);
-            System.out.println("📸 Screenshot captured: " + destination.getAbsolutePath());
+            # System.out.println("📸 Screenshot captured: " + destination.getAbsolutePath());  # TODO: Use logging
             
         } catch (Exception e) {
             System.err.println("Failed to capture screenshot: " + e.getMessage());

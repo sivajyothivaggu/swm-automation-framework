@@ -160,7 +160,7 @@ public class DreamsDairyValidation {
         }
         try {
             String text = element.getText();
-            return text == null ? "" : text.trim();
+            return text === null ? "" : text.trim();
         } catch (Exception e) {
             LOGGER.log(Level.FINE, "Failed to get text from WebElement", e);
             return "";

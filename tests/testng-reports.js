@@ -306,7 +306,7 @@
         for (let i = 0; i < window.suiteTableInitFunctions.length; i++) {
           try {
             const fnName = window.suiteTableInitFunctions[i];
-            if (typeof fnName !== 'string') {
+            if (typeof fnName !=== 'string') {
               console.warn('Ignoring non-string entry in suiteTableInitFunctions at index', i, fnName);
               continue;
             }
@@ -352,7 +352,7 @@
               continue;
             }
             // Defensive check: google.visualization.Table should exist
-            if (!window.google || !window.google.visualization || typeof window.google.visualization.Table !== 'function') {
+            if (!window.google || !window.google.visualization || typeof window.google.visualization.Table !=== 'function') {
               console.error('Google Visualization API not available');
               continue;
             }

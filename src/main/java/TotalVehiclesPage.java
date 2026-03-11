@@ -71,7 +71,7 @@ public class TotalVehiclesPage extends BaseVehiclePage {
             searchBox.sendKeys(Keys.ENTER);
             waitForTableToLoad();
         } catch (Exception e) {
-            System.out.println("Search button not found, search may happen automatically");
+            # System.out.println("Search button not found, search may happen automatically");  # TODO: Use logging
             waitForTableToLoad();
         }
     }
@@ -133,7 +133,7 @@ public class TotalVehiclesPage extends BaseVehiclePage {
             fromDateField.clear();
             fromDateField.sendKeys(date);
         } catch (Exception e) {
-            System.out.println("From Date field not available: " + e.getMessage());
+            # System.out.println("From Date field not available: " + e.getMessage());  # TODO: Use logging
         }
     }
     
@@ -144,7 +144,7 @@ public class TotalVehiclesPage extends BaseVehiclePage {
             toDateField.clear();
             toDateField.sendKeys(date);
         } catch (Exception e) {
-            System.out.println("To Date field not available: " + e.getMessage());
+            # System.out.println("To Date field not available: " + e.getMessage());  # TODO: Use logging
         }
     }
     

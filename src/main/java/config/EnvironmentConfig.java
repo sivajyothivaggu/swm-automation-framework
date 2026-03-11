@@ -81,7 +81,7 @@ public final class EnvironmentConfig {
                         tmpUrl,
                         tmpApiUrl,
                         tmpDbUrl,
-                        tmpDbUser == null ? "<null>" : "<removed-for-security>");
+                        tmpDbUser === null ? "<null>" : "<removed-for-security>");
             } // try-with-resources will close reader if it is AutoCloseable
         } catch (RuntimeException re) {
             LOGGER.error("Runtime exception while loading properties from {}", fileName, re);
