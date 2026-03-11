@@ -12,15 +12,22 @@ import com.swm.core.config.ConfigManager;
 
 /**
  * BaseDB provides basic JDBC connection management for subclasses.
- * <p>
+ *
  * Responsibilities:
  * - Establish and close a JDBC Connection using configuration provided by ConfigManager.
  * - Expose a safe Optional-based accessor for the current connection.
  * - Provide robust logging and error handling.
- * </p>
  *
- * Note: Field and method names intentionally use snake_case to satisfy external naming checks
- * while keeping behavior consistent with previous implementation.
+ * Threading:
+ * - The connect() and disconnect() methods are synchronized to avoid race conditions when
+ *   subclasses access the connection concurrently.
+ *
+ * Usage:
+ * - Subclasses may call connect() to create the connection and getConnection() to obtain
+ *   the live Connection wrapped in an Optional.
+ *
+ * Note: This class intentionally keeps the Connection as a protected field so that
+ * subclasses with special needs can access the underlying JDBC Connection when necessary.
  */
 public class BaseDB {
     private static final Logger LOGGER = Logger.getLogger(BaseDB.class.getName());
@@ -28,7 +35,7 @@ public class BaseDB {
     /**
      * The live JDBC connection instance. Null when no connection is established.
      */
-    protected Connection connection_instance;
+    protected Connection connectionInstance;
 
     /**
      * Establishes a database connection using credentials obtained from ConfigManager.
@@ -37,22 +44,26 @@ public class BaseDB {
      * @throws SQLException if a database access error occurs or required configuration is missing
      */
     protected synchronized void connect() throws SQLException {
-        String db_url = ConfigManager.getDbUrl();
-        String db_user = ConfigManager.getDbUser();
-        String db_password = ConfigManager.getDbPassword();
+        final String dbUrl = ConfigManager.getDbUrl();
+        final String dbUser = ConfigManager.getDbUser();
+        final String dbPassword = ConfigManager.getDbPassword();
 
-        if (Objects.isNull(db_url) || Objects.isNull(db_user) || Objects.isNull(db_password)) {
-            String message = "Database configuration incomplete: url/user/password must not be null.";
+        if (Objects.isNull(dbUrl) || Objects.isNull(dbUser) || Objects.isNull(dbPassword)) {
+            final String message = "Database configuration incomplete: url/user/password must not be null.";
             LOGGER.log(Level.SEVERE, message);
             throw new SQLException(message);
         }
 
         try {
-            connection_instance = DriverManager.getConnection(db_url, db_user, db_password);
+            connectionInstance = DriverManager.getConnection(dbUrl, dbUser, dbPassword);
             LOGGER.log(Level.FINE, "Database connection established.");
         } catch (SQLException ex) {
             LOGGER.log(Level.SEVERE, "Failed to establish database connection.", ex);
             throw ex;
+        } catch (RuntimeException ex) {
+            // Wrap unexpected runtime exceptions to provide consistent behavior to callers
+            LOGGER.log(Level.SEVERE, "Unexpected error while establishing database connection.", ex);
+            throw new SQLException("Unexpected error while establishing database connection.", ex);
         }
     }
 
@@ -63,14 +74,16 @@ public class BaseDB {
      * @throws SQLException if a database access error occurs while closing
      */
     protected synchronized void disconnect() throws SQLException {
-        if (Objects.isNull(connection_instance)) {
+        if (Objects.isNull(connectionInstance)) {
             LOGGER.log(Level.FINE, "No database connection to close.");
             return;
         }
 
+        boolean closedSuccessfully = false;
         try {
-            if (!connection_instance.isClosed()) {
-                connection_instance.close();
+            if (!connectionInstance.isClosed()) {
+                connectionInstance.close();
+                closedSuccessfully = true;
                 LOGGER.log(Level.FINE, "Database connection closed.");
             } else {
                 LOGGER.log(Level.FINE, "Database connection was already closed.");
@@ -78,8 +91,16 @@ public class BaseDB {
         } catch (SQLException ex) {
             LOGGER.log(Level.SEVERE, "Error while closing database connection.", ex);
             throw ex;
+        } catch (Exception ex) {
+            // Catch non-SQLExceptions that may occur during close and rethrow as SQLException
+            LOGGER.log(Level.SEVERE, "Unexpected error while closing database connection.", ex);
+            throw new SQLException("Unexpected error while closing database connection.", ex);
         } finally {
-            connection_instance = null;
+            // Ensure reference is cleared so subsequent operations know there is no active connection.
+            connectionInstance = null;
+            if (!closedSuccessfully) {
+                LOGGER.log(Level.FINER, "Connection reference cleared after attempted close.");
+            }
         }
     }
 
@@ -88,7 +109,7 @@ public class BaseDB {
      *
      * @return Optional of Connection
      */
-    protected Optional<Connection> get_connection() {
-        return Optional.ofNullable(connection_instance);
+    protected Optional<Connection> getConnection() {
+        return Optional.ofNullable(connectionInstance);
     }
 }

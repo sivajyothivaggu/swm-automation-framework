@@ -11,14 +11,26 @@ import java.util.Optional;
 
 /**
  * AuthEndpoints provides wrapper methods for authentication-related API calls.
+ *
  * <p>
  * This class delegates HTTP calls to a RestClient and adds error handling,
  * logging and documentation. It preserves existing functionality while providing
  * safer defaults and helper overloads that return Optional for nullable responses.
  * </p>
+ *
+ * <p>
+ * Usage:
+ * AuthEndpoints endpoints = new AuthEndpoints();
+ * Response resp = endpoints.login(payload);
+ * Optional<Response> maybeResp = endpoints.loginOptional(payload);
+ * </p>
  */
 public class AuthEndpoints extends BaseAPI {
     private static final Logger LOGGER = LoggerFactory.getLogger(AuthEndpoints.class);
+
+    // Endpoint path constants - follow UPPER_CASE naming convention for constants.
+    private static final String LOGIN_ENDPOINT = "/auth/login";
+    private static final String LOGOUT_ENDPOINT = "/auth/logout";
 
     /**
      * Rest client used to perform HTTP operations. Marked final to make the
@@ -51,9 +63,11 @@ public class AuthEndpoints extends BaseAPI {
     /**
      * Performs login with the provided payload.
      *
+     * <p>
      * This method preserves the original behavior of returning the raw Response.
      * It logs useful contextual information, validates input where appropriate,
      * and wraps unexpected exceptions in a RuntimeException to make failures explicit.
+     * </p>
      *
      * @param payload request payload (may be null depending on API contract)
      * @return Response from the /auth/login endpoint (may be null if RestClient returns null)
@@ -67,15 +81,24 @@ public class AuthEndpoints extends BaseAPI {
                 LOGGER.debug("login called with payload of type: {}", payload.getClass().getSimpleName());
             }
 
-            Response response = client.post("/auth/login", payload, getRequestSpec());
+            Response response = client.post(LOGIN_ENDPOINT, payload, getRequestSpec());
             if (Objects.isNull(response)) {
-                LOGGER.warn("Received null Response from POST /auth/login");
+                LOGGER.warn("Received null Response from POST {}", LOGIN_ENDPOINT);
             } else {
-                LOGGER.info("POST /auth/login completed with status code: {}", response.getStatusCode());
+                try {
+                    LOGGER.info("POST {} completed with status code: {}", LOGIN_ENDPOINT, response.getStatusCode());
+                } catch (Exception e) {
+                    // Defensive logging in case response.getStatusCode() throws for some implementations
+                    LOGGER.warn("Unable to obtain status code from Response for POST {}", LOGIN_ENDPOINT, e);
+                }
             }
             return response;
+        } catch (RuntimeException e) {
+            // Re-throw runtime exceptions after logging
+            LOGGER.error("Runtime error while calling POST {}", LOGIN_ENDPOINT, e);
+            throw e;
         } catch (Exception e) {
-            LOGGER.error("Unexpected error while calling POST /auth/login", e);
+            LOGGER.error("Unexpected error while calling POST {}", LOGIN_ENDPOINT, e);
             throw new RuntimeException("Failed to perform login operation", e);
         }
     }
@@ -94,8 +117,10 @@ public class AuthEndpoints extends BaseAPI {
     /**
      * Performs logout.
      *
+     * <p>
      * Preserves original behavior of returning the raw Response. Adds logging and error
      * handling to make issues easier to diagnose in production.
+     * </p>
      *
      * @return Response from the /auth/logout endpoint (may be null if RestClient returns null)
      * @throws RuntimeException if an unexpected error occurs while performing the request
@@ -103,15 +128,22 @@ public class AuthEndpoints extends BaseAPI {
     public Response logout() {
         try {
             LOGGER.debug("logout called");
-            Response response = client.post("/auth/logout", null, getRequestSpec());
+            Response response = client.post(LOGOUT_ENDPOINT, null, getRequestSpec());
             if (Objects.isNull(response)) {
-                LOGGER.warn("Received null Response from POST /auth/logout");
+                LOGGER.warn("Received null Response from POST {}", LOGOUT_ENDPOINT);
             } else {
-                LOGGER.info("POST /auth/logout completed with status code: {}", response.getStatusCode());
+                try {
+                    LOGGER.info("POST {} completed with status code: {}", LOGOUT_ENDPOINT, response.getStatusCode());
+                } catch (Exception e) {
+                    LOGGER.warn("Unable to obtain status code from Response for POST {}", LOGOUT_ENDPOINT, e);
+                }
             }
             return response;
+        } catch (RuntimeException e) {
+            LOGGER.error("Runtime error while calling POST {}", LOGOUT_ENDPOINT, e);
+            throw e;
         } catch (Exception e) {
-            LOGGER.error("Unexpected error while calling POST /auth/logout", e);
+            LOGGER.error("Unexpected error while calling POST {}", LOGOUT_ENDPOINT, e);
             throw new RuntimeException("Failed to perform logout operation", e);
         }
     }

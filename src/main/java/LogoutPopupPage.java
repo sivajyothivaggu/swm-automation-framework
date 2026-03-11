@@ -10,21 +10,22 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Page object representing the Logout confirmation popup.
- * <p>
- * This class exposes helper methods to interact with and query the state of the logout popup.
- * All methods include defensive error handling and logging to make usage in tests more robust.
+ * Page object representing the logout confirmation popup.
+ *
+ * <p>This class provides helper methods to interact with and query the state of the logout
+ * confirmation popup. All public methods include defensive error handling and logging to make
+ * usage in tests more robust and production-ready.</p>
  */
 public class LogoutPopupPage extends BasePage {
 
     private static final Logger logger = LoggerFactory.getLogger(LogoutPopupPage.class);
 
     // Locators for elements on the logout confirmation popup
-    private final By confirm_logout_title = By.xpath("//*[contains(text(), 'Confirm Logout')]");
-    private final By current_user = By.xpath("//*[contains(text(), 'Current User')]");
-    private final By session_started = By.xpath("//*[contains(text(), 'Session Started')]");
-    private final By cancel_button = By.xpath("//button[text()='Cancel']");
-    private final By logout_button = By.xpath("//button[text()='Logout']");
+    private final By confirmLogoutTitle = By.xpath("//*[contains(text(), 'Confirm Logout')]");
+    private final By currentUser = By.xpath("//*[contains(text(), 'Current User')]");
+    private final By sessionStarted = By.xpath("//*[contains(text(), 'Session Started')]");
+    private final By cancelButton = By.xpath("//button[text()='Cancel']");
+    private final By logoutButton = By.xpath("//button[text()='Logout']");
 
     /**
      * Checks whether the logout popup is currently visible on the page.
@@ -33,27 +34,29 @@ public class LogoutPopupPage extends BasePage {
      */
     public boolean isPopupVisible() {
         try {
-            return safeFindVisible(confirm_logout_title).isPresent();
+            return safeFindVisible(confirmLogoutTitle).isPresent();
         } catch (Exception e) {
-            logger.debug("Unexpected error while checking popup visibility", e);
+            logger.debug("Unexpected error while checking popup visibility.", e);
             return false;
         }
     }
 
     /**
      * Waits for the logout popup to become visible.
-     * <p>
-     * This method will throw an unchecked exception if the popup does not become visible within
-     * the underlying wait timeout. The exception is logged with context for debugging.
+     *
+     * <p>This method will throw an unchecked exception if the popup does not become visible within
+     * the underlying wait timeout. The exception is logged with context for debugging.</p>
      */
     public void waitForPopupVisible() {
         try {
-            WebElement el = wait.waitForElementVisible(confirm_logout_title);
+            WebElement el = wait.waitForElementVisible(confirmLogoutTitle);
             if (Objects.isNull(el)) {
-                throw new IllegalStateException("waitForElementVisible returned null for locator: " + confirm_logout_title);
+                String msg = "waitForElementVisible returned null for locator: " + confirmLogoutTitle;
+                logger.error(msg);
+                throw new IllegalStateException(msg);
             }
         } catch (Exception e) {
-            logger.error("Failed waiting for logout popup to be visible (locator: {}).", confirm_logout_title, e);
+            logger.error("Failed waiting for logout popup to be visible. Locator: {}", confirmLogoutTitle, e);
             throw new IllegalStateException("Logout popup did not become visible", e);
         }
     }
@@ -65,9 +68,10 @@ public class LogoutPopupPage extends BasePage {
      */
     public boolean isConfirmLogoutTitleDisplayed() {
         try {
-            return safeFindVisible(confirm_logout_title).map(WebElement::isDisplayed).orElse(false);
+            Optional<WebElement> opt = safeFindVisible(confirmLogoutTitle);
+            return opt.map(WebElement::isDisplayed).orElse(false);
         } catch (Exception e) {
-            logger.debug("Error checking if confirm logout title is displayed", e);
+            logger.debug("Error checking if Confirm Logout title is displayed.", e);
             return false;
         }
     }
@@ -79,9 +83,10 @@ public class LogoutPopupPage extends BasePage {
      */
     public boolean isCurrentUserDisplayed() {
         try {
-            return safeFindVisible(current_user).map(WebElement::isDisplayed).orElse(false);
+            Optional<WebElement> opt = safeFindVisible(currentUser);
+            return opt.map(WebElement::isDisplayed).orElse(false);
         } catch (Exception e) {
-            logger.debug("Error checking if current user is displayed", e);
+            logger.debug("Error checking if current user is displayed.", e);
             return false;
         }
     }
@@ -93,9 +98,10 @@ public class LogoutPopupPage extends BasePage {
      */
     public boolean isSessionStartedDisplayed() {
         try {
-            return safeFindVisible(session_started).map(WebElement::isDisplayed).orElse(false);
+            Optional<WebElement> opt = safeFindVisible(sessionStarted);
+            return opt.map(WebElement::isDisplayed).orElse(false);
         } catch (Exception e) {
-            logger.debug("Error checking if session started is displayed", e);
+            logger.debug("Error checking if session started is displayed.", e);
             return false;
         }
     }
@@ -107,9 +113,10 @@ public class LogoutPopupPage extends BasePage {
      */
     public boolean isCancelButtonVisible() {
         try {
-            return safeFindVisible(cancel_button).map(WebElement::isDisplayed).orElse(false);
+            Optional<WebElement> opt = safeFindVisible(cancelButton);
+            return opt.map(WebElement::isDisplayed).orElse(false);
         } catch (Exception e) {
-            logger.debug("Error checking if cancel button is visible", e);
+            logger.debug("Error checking if cancel button is visible.", e);
             return false;
         }
     }
@@ -121,46 +128,53 @@ public class LogoutPopupPage extends BasePage {
      */
     public boolean isLogoutButtonVisible() {
         try {
-            return safeFindVisible(logout_button).map(WebElement::isDisplayed).orElse(false);
+            Optional<WebElement> opt = safeFindVisible(logoutButton);
+            return opt.map(WebElement::isDisplayed).orElse(false);
         } catch (Exception e) {
-            logger.debug("Error checking if logout button is visible", e);
+            logger.debug("Error checking if logout button is visible.", e);
             return false;
         }
     }
 
     /**
      * Clicks the Logout button on the popup.
-     * <p>
-     * Logs and throws an IllegalStateException if the logout button cannot be clicked.
+     *
+     * <p>Logs and throws an IllegalStateException if the logout button cannot be clicked.</p>
      */
     public void clickLogoutButton() {
         try {
-            WebElement el = wait.waitForElementClickable(logout_button);
+            WebElement el = wait.waitForElementClickable(logoutButton);
             if (Objects.isNull(el)) {
-                logger.error("Clickable logout button element is null (locator: {})", logout_button);
-                throw new IllegalStateException("Clickable logout button is null");
+                String msg = "Clickable logout button element is null for locator: " + logoutButton;
+                logger.error(msg);
+                throw new IllegalStateException(msg);
             }
             el.click();
+            logger.info("Clicked logout button.");
         } catch (Exception e) {
-            logger.error("Failed to click logout button (locator: {}).", logout_button, e);
-            throw new IllegalStateException("Unable to click logout button", e);
+            logger.error("Failed to click logout button. Locator: {}", logoutButton, e);
+            throw new IllegalStateException("Failed to click logout button", e);
         }
     }
 
     /**
-     * Helper that attempts to locate a visible element using the underlying wait utility.
-     * Any exceptions are caught and logged; Optional.empty() is returned in failure cases.
+     * Clicks the Cancel button on the popup.
      *
-     * @param locator the locator to find
-     * @return Optional containing the WebElement if found and non-null, otherwise Optional.empty()
+     * <p>Logs and throws an IllegalStateException if the cancel button cannot be clicked.</p>
      */
-    private Optional<WebElement> safeFindVisible(By locator) {
+    public void clickCancelButton() {
         try {
-            WebElement element = wait.waitForElementVisible(locator);
-            return Objects.isNull(element) ? Optional.empty() : Optional.of(element);
+            WebElement el = wait.waitForElementClickable(cancelButton);
+            if (Objects.isNull(el)) {
+                String msg = "Clickable cancel button element is null for locator: " + cancelButton;
+                logger.error(msg);
+                throw new IllegalStateException(msg);
+            }
+            el.click();
+            logger.info("Clicked cancel button.");
         } catch (Exception e) {
-            logger.debug("Element not found or not visible for locator: {}", locator, e);
-            return Optional.empty();
+            logger.error("Failed to click cancel button. Locator: {}", cancelButton, e);
+            throw new IllegalStateException("Failed to click cancel button", e);
         }
     }
 }

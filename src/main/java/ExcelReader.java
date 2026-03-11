@@ -28,9 +28,14 @@ import java.util.Objects;
  *
  * <p>This class uses Apache POI to read the workbook and SLF4J for logging.
  */
-public class ExcelReader {
+public final class ExcelReader {
 
     private static final Logger logger = LoggerFactory.getLogger(ExcelReader.class);
+
+    // Prevent instantiation
+    private ExcelReader() {
+        throw new AssertionError("ExcelReader is a utility class and should not be instantiated");
+    }
 
     /**
      * Reads the named sheet from the provided Excel (.xlsx) file and returns the data
@@ -45,57 +50,57 @@ public class ExcelReader {
         Objects.requireNonNull(filePath, "filePath must not be null");
         Objects.requireNonNull(sheetName, "sheetName must not be null");
 
-        Path path = Path.of(filePath);
+        final Path path = Path.of(filePath);
         if (!Files.exists(path) || !Files.isRegularFile(path) || !Files.isReadable(path)) {
             logger.error("Excel file is not accessible: {}", filePath);
             throw new IOException("Excel file is not accessible: " + filePath);
         }
 
-        List<Map<String, String>> records = new ArrayList<>();
-        DataFormatter formatter = new DataFormatter();
+        final List<Map<String, String>> records = new ArrayList<>();
+        final DataFormatter formatter = new DataFormatter();
 
         try (FileInputStream fis = new FileInputStream(filePath);
              Workbook workbook = new XSSFWorkbook(fis)) {
 
-            Sheet sheet = workbook.getSheet(sheetName);
+            final Sheet sheet = workbook.getSheet(sheetName);
             if (Objects.isNull(sheet)) {
                 logger.error("Sheet '{}' not found in file '{}'", sheetName, filePath);
                 throw new IOException("Sheet '" + sheetName + "' not found in file: " + filePath);
             }
 
-            Row headerRow = sheet.getRow(0);
+            final Row headerRow = sheet.getRow(0);
             if (Objects.isNull(headerRow)) {
                 logger.error("Header row (row 0) is missing in sheet '{}' of file '{}'", sheetName, filePath);
                 throw new IOException("Header row (row 0) is missing in sheet: " + sheetName);
             }
 
-            int lastRowNum = sheet.getLastRowNum();
-            int lastCellNum = Math.max(0, headerRow.getLastCellNum()); // headerRow.getLastCellNum() can be -1
+            final int lastRowNum = sheet.getLastRowNum();
+            final int lastCellNum = Math.max(0, headerRow.getLastCellNum()); // headerRow.getLastCellNum() can be -1
 
             for (int i = 1; i <= lastRowNum; i++) {
-                Row row = sheet.getRow(i);
+                final Row row = sheet.getRow(i);
                 if (Objects.isNull(row)) {
                     logger.debug("Skipping empty row at index {} in sheet '{}'", i, sheetName);
                     continue;
                 }
 
-                Map<String, String> rowData = new HashMap<>();
+                final Map<String, String> rowData = new HashMap<>();
                 for (int j = 0; j < lastCellNum; j++) {
-                    Cell headerCell = headerRow.getCell(j);
-                    String header = formatter.formatCellValue(headerCell);
-                    if (header == null || header.isEmpty()) {
-                        header = "Column" + j;
-                    }
+                    final Cell headerCell = headerRow.getCell(j);
+                    final String header = Objects.isNull(headerCell) ? "" : formatter.formatCellValue(headerCell);
+                    final String normalizedHeader = (Objects.isNull(header) || header.isEmpty()) ? "Column" + j : header;
 
-                    Cell cell = row.getCell(j);
-                    String value = cell != null ? formatter.formatCellValue(cell) : "";
-                    rowData.put(header, value);
+                    final Cell cell = row.getCell(j);
+                    final String value = Objects.isNull(cell) ? "" : formatter.formatCellValue(cell);
+
+                    rowData.put(normalizedHeader, value);
                 }
                 records.add(rowData);
+                logger.trace("Processed row {} in sheet '{}'", i, sheetName);
             }
 
         } catch (IOException e) {
-            logger.error("I/O error while reading Excel file '{}': {}", filePath, e.getMessage());
+            logger.error("I/O error while reading Excel file '{}': {}", filePath, e.getMessage(), e);
             throw e;
         } catch (RuntimeException e) {
             logger.error("Unexpected error while reading Excel file '{}': {}", filePath, e.getMessage(), e);

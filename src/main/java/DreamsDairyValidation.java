@@ -23,13 +23,14 @@ import io.github.bonigarcia.wdm.WebDriverManager;
  * - Each row contains three non-empty columns: Dream Name, Days Ago, Dream Type.
  * - Dream Type is either "Good" or "Bad".
  *
- * This class uses a managed WebDriver to ensure proper shutdown and extensive
- * logging and error handling to be production-ready.
+ * This class uses a managed WebDriver to ensure proper shutdown and provides
+ * comprehensive logging and error handling for production readiness.
  */
 public class DreamsDairyValidation {
 
     private static final Logger LOGGER = Logger.getLogger(DreamsDairyValidation.class.getName());
     private static final String TARGET_URL = "https://arjitnigam.github.io/myDreams/dreams-diary.html";
+    private static final Duration WAIT_TIMEOUT = Duration.ofSeconds(10);
 
     /**
      * Entry point for the validation.
@@ -37,62 +38,80 @@ public class DreamsDairyValidation {
      * @param args CLI args (not used)
      */
     public static void main(String[] args) {
+        LOGGER.info("Starting DreamsDairyValidation");
         WebDriverManager.chromedriver().setup();
 
         try (ManagedWebDriver managed = new ManagedWebDriver(new ChromeDriver())) {
             WebDriver driver = managed.get();
-            driver.manage().window().maximize();
+            if (Objects.isNull(driver)) {
+                LOGGER.severe("WebDriver instance is null after initialization. Aborting.");
+                return;
+            }
 
-            Optional<List<WebElement>> optional_rows = fetchRows(driver);
-            if (optional_rows.isEmpty()) {
+            try {
+                driver.manage().window().maximize();
+            } catch (Exception e) {
+                LOGGER.log(Level.WARNING, "Failed to maximize browser window", e);
+            }
+
+            Optional<List<WebElement>> optionalRows = fetchRows(driver);
+            if (optionalRows.isEmpty()) {
                 LOGGER.severe("No rows found in the dreams diary table. Aborting validation.");
                 return;
             }
 
-            List<WebElement> rows_list = optional_rows.get();
+            List<WebElement> rowsList = optionalRows.get();
 
             // Validate number of rows
-            if (rows_list.size() == 10) {
+            if (rowsList.size() == 10) {
                 LOGGER.info("Exactly 10 dream entries present");
             } else {
-                LOGGER.warning("Expected 10 dream entries but found: " + rows_list.size());
+                LOGGER.warning("Expected 10 dream entries but found: " + rowsList.size());
             }
 
-            boolean type_check = true;
-            boolean column_check = true;
+            boolean typeCheck = true;
+            boolean columnCheck = true;
 
             // Validate each row
-            for (WebElement row_elem : rows_list) {
-                List<WebElement> columns_list = row_elem.findElements(By.tagName("td"));
+            for (WebElement rowElement : rowsList) {
+                try {
+                    List<WebElement> columnsList = rowElement.findElements(By.tagName("td"));
 
-                if (columns_list.size() == 3) {
-                    String dream_name = safeGetText(columns_list.get(0));
-                    String days_ago = safeGetText(columns_list.get(1));
-                    String dream_type = safeGetText(columns_list.get(2));
+                    if (columnsList.size() == 3) {
+                        String dreamName = safeGetText(columnsList.get(0));
+                        String daysAgo = safeGetText(columnsList.get(1));
+                        String dreamType = safeGetText(columnsList.get(2));
 
-                    if (dream_name.isEmpty() || days_ago.isEmpty() || dream_type.isEmpty()) {
-                        column_check = false;
-                        LOGGER.fine(String.format("Missing data in row - Dream Name: '%s', Days Ago: '%s', Dream Type: '%s'",
-                                dream_name, days_ago, dream_type));
+                        if (dreamName.isEmpty() || daysAgo.isEmpty() || dreamType.isEmpty()) {
+                            columnCheck = false;
+                            LOGGER.fine(String.format(
+                                    "Missing data in row - Dream Name: '%s', Days Ago: '%s', Dream Type: '%s'",
+                                    dreamName, daysAgo, dreamType));
+                        }
+
+                        if (!(dreamType.equalsIgnoreCase("Good") || dreamType.equalsIgnoreCase("Bad"))) {
+                            typeCheck = false;
+                            LOGGER.fine("Invalid dream type encountered: " + dreamType);
+                        }
+                    } else {
+                        columnCheck = false;
+                        LOGGER.fine("Row does not have 3 columns. Actual columns: " + columnsList.size());
                     }
-
-                    if (!(dream_type.equalsIgnoreCase("Good") || dream_type.equalsIgnoreCase("Bad"))) {
-                        type_check = false;
-                        LOGGER.fine("Invalid dream type encountered: " + dream_type);
-                    }
-                } else {
-                    column_check = false;
-                    LOGGER.fine("Row does not have 3 columns. Actual columns: " + columns_list.size());
+                } catch (Exception e) {
+                    // Continue validating remaining rows but log the issue.
+                    columnCheck = false;
+                    typeCheck = false;
+                    LOGGER.log(Level.WARNING, "Exception while validating a row. Continuing with next row.", e);
                 }
             }
 
-            if (column_check) {
+            if (columnCheck) {
                 LOGGER.info("All rows have Dream Name, Days Ago, and Dream Type filled");
             } else {
                 LOGGER.warning("Some rows have missing data in columns");
             }
 
-            if (type_check) {
+            if (typeCheck) {
                 LOGGER.info("The dream types are only \"Good\" or \"Bad\".");
             } else {
                 LOGGER.warning("Some dream types are invalid");
@@ -100,6 +119,8 @@ public class DreamsDairyValidation {
 
         } catch (Exception e) {
             LOGGER.log(Level.SEVERE, "An unexpected error occurred while validating dreams diary", e);
+        } finally {
+            LOGGER.info("DreamsDairyValidation finished");
         }
     }
 
@@ -110,10 +131,14 @@ public class DreamsDairyValidation {
      * @return Optional containing the list of rows if found, otherwise Optional.empty()
      */
     private static Optional<List<WebElement>> fetchRows(WebDriver driver) {
-        Objects.requireNonNull(driver, "WebDriver must not be null");
+        if (Objects.isNull(driver)) {
+            LOGGER.severe("fetchRows was called with null WebDriver");
+            return Optional.empty();
+        }
+
         try {
             driver.get(TARGET_URL);
-            WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
+            WebDriverWait wait = new WebDriverWait(driver, WAIT_TIMEOUT);
             List<WebElement> rows = wait.until(
                     ExpectedConditions.visibilityOfAllElementsLocatedBy(By.xpath("//table/tbody/tr")));
             return Optional.ofNullable(rows);
@@ -124,41 +149,66 @@ public class DreamsDairyValidation {
     }
 
     /**
-     * Safely obtains trimmed text from a WebElement. Returns empty string for nulls.
+     * Safely obtains trimmed text from a WebElement.
      *
-     * @param element WebElement to extract text from
-     * @return trimmed text or empty string
+     * @param element source WebElement
+     * @return trimmed text or empty string if element or text is null or an error occurs
      */
     private static String safeGetText(WebElement element) {
         if (Objects.isNull(element)) {
             return "";
         }
-        return Optional.ofNullable(element.getText()).map(String::trim).orElse("");
+        try {
+            String text = element.getText();
+            return text == null ? "" : text.trim();
+        } catch (Exception e) {
+            LOGGER.log(Level.FINE, "Failed to get text from WebElement", e);
+            return "";
+        }
     }
 
     /**
-     * A small wrapper to allow try-with-resources behaviour for WebDriver and to ensure
-     * graceful shutdown with logging on errors.
+     * ManagedWebDriver is a small helper that wraps a WebDriver and ensures it is
+     * properly quit when closed. It implements AutoCloseable to allow use in
+     * try-with-resources blocks.
      */
     private static class ManagedWebDriver implements AutoCloseable {
+
         private final WebDriver driver;
 
+        /**
+         * Creates a managed wrapper around the provided WebDriver.
+         *
+         * @param driver the WebDriver to manage
+         */
         ManagedWebDriver(WebDriver driver) {
             this.driver = driver;
         }
 
-        public WebDriver get() {
+        /**
+         * Returns the underlying WebDriver instance.
+         *
+         * @return the managed WebDriver
+         */
+        WebDriver get() {
             return driver;
         }
 
+        /**
+         * Quits the underlying WebDriver. Any exceptions during quit are logged but
+         * suppressed to avoid masking original exceptions.
+         */
         @Override
         public void close() {
-            if (Objects.nonNull(driver)) {
-                try {
-                    driver.quit();
-                } catch (Exception e) {
-                    LOGGER.log(Level.WARNING, "Error while quitting WebDriver", e);
-                }
+            if (Objects.isNull(driver)) {
+                LOGGER.fine("No WebDriver to close");
+                return;
+            }
+            try {
+                driver.quit();
+                LOGGER.fine("WebDriver quit successfully");
+            } catch (Exception e) {
+                LOGGER.log(Level.WARNING, "Exception while quitting WebDriver", e);
             }
         }
     }

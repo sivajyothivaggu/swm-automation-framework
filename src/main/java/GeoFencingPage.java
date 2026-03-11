@@ -4,6 +4,8 @@ import java.util.Objects;
 import java.util.Optional;
 
 import org.openqa.selenium.WebElement;
+import org.openqa.selenium.StaleElementReferenceException;
+import org.openqa.selenium.NoSuchElementException;
 import org.openqa.selenium.support.FindBy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,11 +34,12 @@ public class GeoFencingPage extends BasePage {
      * Clicks the "Create Geofence" button.
      *
      * <p>This method performs a null check on the underlying WebElement and logs
-     * both normal operation and error conditions. Any failure during the click
-     * is logged and an IllegalStateException is thrown to surface the problem
-     * to callers in a clear manner.</p>
+     * both normal operation and error conditions. It also verifies that the
+     * element is displayed and enabled before attempting to click. Any failure
+     * during the click is logged and an IllegalStateException is thrown to
+     * surface the problem to callers in a clear manner.</p>
      *
-     * @throws IllegalStateException if the button is not present or the click action fails
+     * @throws IllegalStateException if the button is not present, not interactable, or the click action fails
      */
     public void clickCreateGeofence() {
         if (Objects.isNull(createGeofenceButton)) {
@@ -45,11 +48,37 @@ public class GeoFencingPage extends BasePage {
         }
 
         try {
+            LOGGER.debug("Verifying Create Geofence button is displayed and enabled before clicking.");
+            boolean displayed;
+            boolean enabled;
+            try {
+                displayed = createGeofenceButton.isDisplayed();
+                enabled = createGeofenceButton.isEnabled();
+            } catch (StaleElementReferenceException | NoSuchElementException ex) {
+                LOGGER.warn("Create Geofence button reference is stale or not present when checking interactability.", ex);
+                throw new IllegalStateException("Create Geofence button is not available or stale.", ex);
+            } catch (Exception ex) {
+                LOGGER.error("Unexpected error while checking Create Geofence button state.", ex);
+                throw new IllegalStateException("Failed to verify Create Geofence button state.", ex);
+            }
+
+            if (!displayed) {
+                LOGGER.error("Create Geofence button is present but not displayed.");
+                throw new IllegalStateException("Create Geofence button is not displayed.");
+            }
+            if (!enabled) {
+                LOGGER.error("Create Geofence button is present but not enabled.");
+                throw new IllegalStateException("Create Geofence button is not enabled.");
+            }
+
             LOGGER.debug("Attempting to click the Create Geofence button.");
             createGeofenceButton.click();
             LOGGER.info("Create Geofence button clicked successfully.");
+        } catch (IllegalStateException ise) {
+            // Already logged above with a clear message; rethrow to preserve behaviour.
+            throw ise;
         } catch (Exception ex) {
-            LOGGER.error("Failed to click the Create Geofence button.", ex);
+            LOGGER.error("Failed to click the Create Geofence button due to an unexpected error.", ex);
             throw new IllegalStateException("Failed to click the Create Geofence button.", ex);
         }
     }

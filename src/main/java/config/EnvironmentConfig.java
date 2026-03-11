@@ -21,6 +21,14 @@ import org.slf4j.LoggerFactory;
 public final class EnvironmentConfig {
     private static final Logger LOGGER = LoggerFactory.getLogger(EnvironmentConfig.class);
 
+    // Property keys - constants are UPPER_CASE per Java conventions
+    private static final String PROP_APP_URL = "app.url";
+    private static final String PROP_API_URL = "api.url";
+    private static final String PROP_DB_URL = "db.url";
+    private static final String PROP_DB_USER = "db.user";
+    private static final String PROP_DB_PASSWORD = "db.password";
+    private static final String PROPERTIES_SUFFIX = ".properties";
+
     private final String url;
     private final String apiUrl;
     private final String dbUrl;
@@ -39,8 +47,9 @@ public final class EnvironmentConfig {
             throw new IllegalArgumentException("env must be a non-empty string");
         }
 
-        String fileName = env.trim() + ".properties";
+        String fileName = env.trim() + PROPERTIES_SUFFIX;
         PropertyReader reader = null;
+
         String tmpUrl = null;
         String tmpApiUrl = null;
         String tmpDbUrl = null;
@@ -50,19 +59,30 @@ public final class EnvironmentConfig {
         try {
             reader = new PropertyReader(fileName);
 
-            tmpUrl = safeTrim(reader.getProperty("app.url"));
-            tmpApiUrl = safeTrim(reader.getProperty("api.url"));
-            tmpDbUrl = safeTrim(reader.getProperty("db.url"));
-            tmpDbUser = safeTrim(reader.getProperty("db.user"));
-            tmpDbPassword = safeTrim(reader.getProperty("db.password"));
+            // Use try-with-resources when possible: if reader implements AutoCloseable,
+            // the inner try will close it automatically; if not, resource is null and no close is attempted.
+            try (AutoCloseable ignored = reader instanceof AutoCloseable ? (AutoCloseable) reader : null) {
+                tmpUrl = safeTrim(reader.getProperty(PROP_APP_URL));
+                tmpApiUrl = safeTrim(reader.getProperty(PROP_API_URL));
+                tmpDbUrl = safeTrim(reader.getProperty(PROP_DB_URL));
+                tmpDbUser = safeTrim(reader.getProperty(PROP_DB_USER));
+                tmpDbPassword = safeTrim(reader.getProperty(PROP_DB_PASSWORD));
 
-            // Log missing important properties at WARN level to help diagnostics
-            if (Objects.isNull(tmpUrl)) {
-                LOGGER.warn("Property 'app.url' is missing in {}", fileName);
-            }
-            if (Objects.isNull(tmpApiUrl)) {
-                LOGGER.warn("Property 'api.url' is missing in {}", fileName);
-            }
+                // Log missing important properties at WARN level to help diagnostics
+                if (Objects.isNull(tmpUrl)) {
+                    LOGGER.warn("Property '{}' is missing in {}", PROP_APP_URL, fileName);
+                }
+                if (Objects.isNull(tmpApiUrl)) {
+                    LOGGER.warn("Property '{}' is missing in {}", PROP_API_URL, fileName);
+                }
+
+                LOGGER.debug("Loaded properties from {}: app.url={}, api.url={}, db.url={}, db.user={}",
+                        fileName,
+                        tmpUrl,
+                        tmpApiUrl,
+                        tmpDbUrl,
+                        tmpDbUser == null ? "<null>" : "<removed-for-security>");
+            } // try-with-resources will close reader if it is AutoCloseable
         } catch (RuntimeException re) {
             LOGGER.error("Runtime exception while loading properties from {}", fileName, re);
             throw re;
@@ -70,10 +90,15 @@ public final class EnvironmentConfig {
             LOGGER.error("Failed to load properties from {}: {}", fileName, e.getMessage(), e);
             throw new IllegalStateException("Failed to load environment properties from " + fileName, e);
         } finally {
-            // Attempt to close the reader if it implements AutoCloseable
-            if (reader instanceof AutoCloseable) {
+            // If reader existed but did not implement AutoCloseable, attempt to close via reflection if a close method exists.
+            // This preserves the previous behavior where we attempted to close the reader if possible.
+            if (reader != null && !(reader instanceof AutoCloseable)) {
                 try {
-                    ((AutoCloseable) reader).close();
+                    // Attempt to invoke a close() method if present to avoid leaking resources.
+                    reader.getClass().getMethod("close").invoke(reader);
+                } catch (NoSuchMethodException nsme) {
+                    // No close method available - nothing to do.
+                    LOGGER.debug("PropertyReader for {} does not implement AutoCloseable and has no close() method", fileName);
                 } catch (Exception e) {
                     LOGGER.warn("Failed to close PropertyReader for {}: {}", fileName, e.getMessage(), e);
                 }
@@ -144,16 +169,5 @@ public final class EnvironmentConfig {
         }
         String trimmed = value.trim();
         return trimmed.isEmpty() ? null : trimmed;
-    }
-
-    @Override
-    public String toString() {
-        return "EnvironmentConfig{"
-                + "url=" + (url == null ? "null" : "<hidden>")
-                + ", apiUrl=" + (apiUrl == null ? "null" : "<hidden>")
-                + ", dbUrl=" + (dbUrl == null ? "null" : "<hidden>")
-                + ", dbUser=" + (dbUser == null ? "null" : "<hidden>")
-                + ", dbPassword=" + (dbPassword == null ? "null" : "<hidden>")
-                + '}';
     }
 }

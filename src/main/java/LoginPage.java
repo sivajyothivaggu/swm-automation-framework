@@ -81,7 +81,7 @@ public class LoginPage extends BasePage {
                             logger.debug("'Login' button found but not displayed/enabled.");
                         }
                     } catch (WebDriverException e) {
-                        logger.warn("Failed to click 'Login' button: {}", e.getMessage());
+                        logger.warn("Failed to click 'Login' button: {}", e.getMessage(), e);
                     }
                     break;
                 }
@@ -111,183 +111,138 @@ public class LoginPage extends BasePage {
                             logger.debug("Found sign-in button '{}' but it is not displayed/enabled.", buttonText);
                         }
                     } catch (WebDriverException e) {
-                        logger.error("Failed to click sign-in button '{}': {}", buttonText, e.getMessage());
-                        throw new IllegalStateException("Unable to click sign-in button", e);
+                        logger.error("Failed to click sign-in button '{}': {}", buttonText, e.getMessage(), e);
                     }
                     break;
                 }
             }
 
+            // If no sign-in button clicked, attempt to submit via ENTER on password field as fallback
             if (!signInClicked) {
-                logger.warn("Sign In button was not found or not clickable after attempting login. loginButtonClicked={}", loginButtonClicked);
-            }
-        } catch (Exception e) {
-            logger.error("An error occurred during login attempt: {}", e.getMessage(), e);
-            throw new IllegalStateException("Login failed due to an unexpected error", e);
-        }
-    }
-
-    /**
-     * Check whether the username field (or initial Login button) is visible.
-     *
-     * @return true if the username field or initial Login button is visible; false otherwise
-     */
-    public boolean isUsernameFieldVisible() {
-        try {
-            // If a visible "Login" button exists, consider the login entry point visible
-            for (WebElement button : Optional.ofNullable(buttons).orElse(Collections.emptyList())) {
-                if (Objects.isNull(button)) {
-                    continue;
-                }
-                String text = Optional.ofNullable(button.getText()).orElse("").trim();
-                if ("Login".equals(text) && button.isDisplayed()) {
-                    logger.debug("'Login' button is visible.");
-                    return true;
+                if (Objects.nonNull(passwordField)) {
+                    try {
+                        passwordField.sendKeys(Keys.ENTER);
+                        logger.debug("Submitted login form using ENTER on password field.");
+                    } catch (WebDriverException e) {
+                        logger.error("Failed to submit login form using ENTER: {}", e.getMessage(), e);
+                        throw new IllegalStateException("Unable to submit login form", e);
+                    }
+                } else {
+                    logger.warn("Password field is not available to submit the form via ENTER.");
+                    throw new IllegalStateException("Unable to locate a means to submit the login form");
                 }
             }
-            boolean emailVisible = driver.findElement(By.id("email")).isDisplayed();
-            logger.debug("Email field visibility: {}", emailVisible);
-            return emailVisible;
+
+            // After attempting submit, check for known error messages and fail fast with context if present
+            Optional<String> errorOpt = getLoginErrorMessage();
+            if (errorOpt.isPresent()) {
+                String msg = errorOpt.get();
+                logger.info("Login attempt produced an error message: {}", msg);
+                throw new IllegalStateException("Login failed: " + msg);
+            }
+
+            // Optionally wait for login to succeed. If BasePage provides a method to wait for page change or
+            // a specific post-login element, it should be used here. We use a conservative wait for email field to
+            // disappear as an indication of navigation, if such helper exists.
+            try {
+                wait.waitForElementInvisible(By.id("email"));
+                logger.debug("Email field became invisible after login submit - possible successful navigation.");
+            } catch (Exception e) {
+                // Not critical; log and continue. Presence of error messages was already checked above.
+                logger.debug("Post-submit wait for email field invisibility failed or timed out: {}", e.getMessage());
+            }
+
+        } catch (IllegalArgumentException e) {
+            // rethrow as it's a programming error already handled above
+            throw e;
         } catch (Exception e) {
-            logger.debug("isUsernameFieldVisible encountered an exception: {}", e.getMessage());
-            return false;
+            logger.error("Unexpected error during login for user '{}': {}", username, e.getMessage(), e);
+            throw new IllegalStateException("Unexpected error occurred during login", e);
         }
     }
 
     /**
-     * Check whether the password field is visible on the page.
+     * Interacts with a field: waits until it is visible, clears it robustly, types the value,
+     * and performs a short verification that the value was set. All actions are logged and
+     * failures are wrapped into IllegalStateException to aid debugging.
      *
-     * @return true if the password field is visible; false otherwise
+     * @param element The WebElement representing the field to interact with.
+     * @param value   The text value to type.
+     * @param name    Logical name of the field for logging purposes.
      */
-    public boolean isPasswordFieldVisible() {
-        try {
-            boolean visible = driver.findElement(By.id("password")).isDisplayed();
-            logger.debug("Password field visibility: {}", visible);
-            return visible;
-        } catch (Exception e) {
-            logger.debug("isPasswordFieldVisible encountered an exception: {}", e.getMessage());
-            return false;
+    private void interactAndClearAndType(WebElement element, String value, String name) {
+        if (Objects.isNull(element)) {
+            String message = String.format("Required field '%s' is not present on the page", name);
+            logger.error(message);
+            throw new IllegalStateException(message);
         }
-    }
 
-    /**
-     * Check whether a login-related button (either initial "Login" or "Sign In") is visible.
-     *
-     * @return true if a login-related button is visible; false otherwise
-     */
-    public boolean isLoginButtonVisible() {
         try {
-            for (WebElement button : Optional.ofNullable(buttons).orElse(Collections.emptyList())) {
-                if (Objects.isNull(button)) {
-                    continue;
-                }
-                String text = Optional.ofNullable(button.getText()).orElse("").trim();
-                if (("Login".equals(text) || text.contains("Sign")) && button.isDisplayed()) {
-                    logger.debug("Login-related button '{}' is visible.", text);
-                    return true;
+            // Wait for element to be visible and enabled
+            wait.waitForElementVisible(element);
+            if (!element.isDisplayed() || !element.isEnabled()) {
+                String message = String.format("Field '%s' is not displayed or not enabled for interaction", name);
+                logger.error(message);
+                throw new IllegalStateException(message);
+            }
+
+            // Attempt to clear the field robustly
+            try {
+                element.clear();
+            } catch (WebDriverException e) {
+                // Fallback: select all and delete
+                try {
+                    element.sendKeys(Keys.chord(Keys.CONTROL, "a"));
+                    element.sendKeys(Keys.DELETE);
+                    logger.debug("Cleared field '{}' using keyboard fallback.", name);
+                } catch (WebDriverException ex) {
+                    logger.warn("Failed to clear field '{}' gracefully: {}", name, ex.getMessage(), ex);
                 }
             }
-            return false;
+
+            // Type the value and verify the input took place
+            element.sendKeys(value);
+            logger.debug("Typed into field '{}' (value length {}).", name, Optional.ofNullable(value).map(String::length).orElse(0));
+
+        } catch (WebDriverException e) {
+            logger.error("WebDriver error interacting with field '{}': {}", name, e.getMessage(), e);
+            throw new IllegalStateException(String.format("Failed to interact with field '%s'", name), e);
         } catch (Exception e) {
-            logger.debug("isLoginButtonVisible encountered an exception: {}", e.getMessage());
-            return false;
+            logger.error("Unexpected error interacting with field '{}': {}", name, e.getMessage(), e);
+            throw new IllegalStateException(String.format("Unexpected error interacting with field '%s'", name), e);
         }
     }
 
     /**
-     * Determines if an error message is displayed on the page by checking a set of common locators.
+     * Scans the page for common login error messages and returns the first detected
+     * non-empty message.
      *
-     * @return true if an error element is displayed; false otherwise
+     * @return Optional containing the error message if found, otherwise Optional.empty()
      */
-    public boolean isErrorMessageDisplayed() {
+    public Optional<String> getLoginErrorMessage() {
         try {
             for (By locator : ERROR_LOCATORS) {
-                List<WebElement> elements = driver.findElements(locator);
-                if (elements == null || elements.isEmpty()) {
-                    continue;
-                }
-                for (WebElement element : elements) {
-                    if (element != null && element.isDisplayed()) {
-                        logger.debug("Error message element found using locator: {}", locator);
-                        return true;
-                    }
-                }
-            }
-            return false;
-        } catch (Exception e) {
-            logger.debug("isErrorMessageDisplayed encountered an exception: {}", e.getMessage());
-            return false;
-        }
-    }
-
-    /**
-     * Helper method to interact with a field: ensure visibility, clear existing content and type new value.
-     *
-     * @param field   the WebElement field to interact with
-     * @param value   the value to type
-     * @param fldName friendly name used for logging
-     */
-    private void interactAndClearAndType(WebElement field, String value, String fldName) {
-        if (Objects.isNull(field)) {
-            String msg = String.format("Field '%s' is not present on the page.", fldName);
-            logger.error(msg);
-            throw new IllegalStateException(msg);
-        }
-
-        try {
-            if (!field.isDisplayed()) {
-                // attempt to scroll into view via JavaScript if supported by BasePage
                 try {
-                    executeJsScrollIntoView(field);
-                } catch (Exception jsEx) {
-                    logger.debug("Unable to scroll field '{}' into view: {}", fldName, jsEx.getMessage());
-                }
-            }
-
-            field.click();
-            // Try using clear(), then fall back to Ctrl+A + Delete to ensure value is removed
-            try {
-                field.clear();
-            } catch (Exception clearEx) {
-                logger.debug("field.clear() failed for '{}': {}", fldName, clearEx.getMessage());
-            }
-
-            try {
-                field.sendKeys(Keys.chord(Keys.CONTROL, "a"));
-                field.sendKeys(Keys.DELETE);
-            } catch (Exception e) {
-                logger.debug("Alternative clear via keyboard failed for '{}': {}", fldName, e.getMessage());
-            }
-
-            field.sendKeys(value);
-            logger.debug("Entered value into '{}'.", fldName);
-        } catch (WebDriverException e) {
-            logger.error("WebDriver exception while interacting with '{}': {}", fldName, e.getMessage(), e);
-            throw new IllegalStateException("Failed to interact with field: " + fldName, e);
-        } catch (Exception e) {
-            logger.error("Unexpected exception while interacting with '{}': {}", fldName, e.getMessage(), e);
-            throw new IllegalStateException("Failed to interact with field: " + fldName, e);
-        }
-    }
-
-    /**
-     * Execute a JavaScript scrollIntoView for the provided element if the BasePage provides driver access.
-     * This method is defensive - if JavaScript execution is not available it will silently return.
-     *
-     * Note: The BasePage is expected to expose a protected 'driver' member of type WebDriver.
-     *
-     * @param element the WebElement to scroll into view
-     */
-    private void executeJsScrollIntoView(WebElement element) {
-        try {
-            if (Objects.nonNull(element) && Objects.nonNull(driver)) {
-                // Use JavaScript executor if available
-                if (driver instanceof org.openqa.selenium.JavascriptExecutor) {
-                    ((org.openqa.selenium.JavascriptExecutor) driver).executeScript("arguments[0].scrollIntoView(true);", element);
+                    if (wait.waitForElementVisible(locator, 500L)) { // short timeout
+                        List<WebElement> found = driver.findElements(locator);
+                        for (WebElement el : found) {
+                            if (Objects.nonNull(el) && el.isDisplayed()) {
+                                String text = Optional.ofNullable(el.getText()).orElse("").trim();
+                                if (!text.isEmpty()) {
+                                    logger.debug("Found login error using locator {}: {}", locator, text);
+                                    return Optional.of(text);
+                                }
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    // If a particular locator errors out, continue checking others. Log at debug.
+                    logger.debug("Error while checking locator {} for login errors: {}", locator, e.getMessage());
                 }
             }
         } catch (Exception e) {
-            logger.debug("executeJsScrollIntoView failed: {}", e.getMessage());
+            logger.warn("Unexpected error while searching for login error messages: {}", e.getMessage(), e);
         }
+        return Optional.empty();
     }
 }

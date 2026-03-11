@@ -54,10 +54,10 @@ public class DBConnection extends BaseDB {
             try (Statement stmt = connection.createStatement();
                  ResultSet rs = stmt.executeQuery(query)) {
 
-                CachedRowSet cached = RowSetProvider.newFactory().createCachedRowSet();
-                cached.populate(rs);
+                CachedRowSet cached_row_set = RowSetProvider.newFactory().createCachedRowSet();
+                cached_row_set.populate(rs);
                 logger.debug("Query executed and results populated into CachedRowSet.");
-                return cached;
+                return cached_row_set;
             }
         } catch (SQLException sqle) {
             logger.error("SQLException while executing query [{}]: {}", query, sqle.getMessage(), sqle);
@@ -89,15 +89,17 @@ public class DBConnection extends BaseDB {
         Objects.requireNonNull(query, "query must not be null");
         logger.debug("Executing update: {}", query);
 
-        if (Objects.isNull(connection) || connection.isClosed()) {
-            logger.debug("Database connection is null or closed; attempting to connect.");
-            connect();
-        }
+        try {
+            if (Objects.isNull(connection) || connection.isClosed()) {
+                logger.debug("Database connection is null or closed; attempting to connect.");
+                connect();
+            }
 
-        try (Statement stmt = connection.createStatement()) {
-            int result = stmt.executeUpdate(query);
-            logger.debug("Update executed. Rows affected: {}", result);
-            return result;
+            try (Statement stmt = connection.createStatement()) {
+                int result = stmt.executeUpdate(query);
+                logger.debug("Update executed. Rows affected: {}", result);
+                return result;
+            }
         } catch (SQLException sqle) {
             logger.error("SQLException while executing update [{}]: {}", query, sqle.getMessage(), sqle);
             throw sqle;
@@ -115,48 +117,56 @@ public class DBConnection extends BaseDB {
     }
 
     /**
-     * Converts the given ResultSet into a List of Maps. Each Map represents a single row,
-     * mapping column labels to their corresponding values.
+     * Converts the given ResultSet into a List of Maps. Each Map represents a single row
+     * with column labels as keys and column values as values.
      *
-     * Note: This method does not close the provided ResultSet. If the caller expects the
-     * ResultSet to be closed, it should do so after calling this method.
+     * Note: This method will close the ResultSet if it is an instance of CachedRowSet
+     * after conversion. It will not attempt to close other ResultSet implementations to
+     * avoid closing resources owned by callers.
      *
-     * @param resultSet the ResultSet to convert; must not be null
-     * @return a List of Maps representing the rows; never null (empty list if no rows)
-     * @throws SQLException if a database access error occurs while reading the ResultSet
-     * @throws NullPointerException if resultSet is null
+     * @param result_set the ResultSet to convert; must not be null
+     * @return List of rows represented as maps; never null (empty list if no rows)
+     * @throws SQLException if a database access error occurs during reading
+     * @throws NullPointerException if result_set is null
      */
-    public List<Map<String, Object>> getResultList(ResultSet resultSet) throws SQLException {
-        Objects.requireNonNull(resultSet, "resultSet must not be null");
-        logger.debug("Converting ResultSet to List<Map<String,Object>>.");
+    public List<Map<String, Object>> getResultList(ResultSet result_set) throws SQLException {
+        Objects.requireNonNull(result_set, "result_set must not be null");
+        logger.debug("Converting ResultSet to List<Map<String, Object>>.");
 
-        List<Map<String, Object>> resultList = new ArrayList<>();
+        List<Map<String, Object>> result_list = new ArrayList<>();
 
         try {
-            ResultSetMetaData metaData = resultSet.getMetaData();
-            int columnCount = metaData.getColumnCount();
+            ResultSetMetaData meta_data = result_set.getMetaData();
+            int column_count = meta_data.getColumnCount();
 
-            while (resultSet.next()) {
-                Map<String, Object> row = new HashMap<>(columnCount);
-                for (int i = 1; i <= columnCount; i++) {
-                    // Use column label to respect SQL aliases; fall back to column name if needed.
-                    String columnLabel = metaData.getColumnLabel(i);
-                    if (columnLabel == null || columnLabel.isEmpty()) {
-                        columnLabel = metaData.getColumnName(i);
-                    }
-                    row.put(columnLabel, resultSet.getObject(i));
+            while (result_set.next()) {
+                Map<String, Object> row_map = new HashMap<>(column_count);
+                for (int col_index = 1; col_index <= column_count; col_index++) {
+                    String column_label = meta_data.getColumnLabel(col_index);
+                    Object value = result_set.getObject(col_index);
+                    row_map.put(column_label, value);
                 }
-                resultList.add(row);
+                result_list.add(row_map);
             }
 
-            logger.debug("ResultSet conversion complete. Rows converted: {}", resultList.size());
-            return resultList;
+            logger.debug("Converted ResultSet to list with {} rows.", result_list.size());
+            return result_list;
         } catch (SQLException sqle) {
             logger.error("SQLException while converting ResultSet to list: {}", sqle.getMessage(), sqle);
             throw sqle;
         } catch (Exception e) {
             logger.error("Unexpected exception while converting ResultSet to list: {}", e.getMessage(), e);
             throw new SQLException("Unexpected error converting ResultSet to list", e);
+        } finally {
+            // Close the ResultSet only if it's a CachedRowSet (disconnected and safe to close)
+            try {
+                if (result_set instanceof CachedRowSet) {
+                    ((CachedRowSet) result_set).close();
+                    logger.debug("Closed CachedRowSet after conversion.");
+                }
+            } catch (Exception e) {
+                logger.warn("Failed to close ResultSet after conversion: {}", e.getMessage(), e);
+            }
         }
     }
 }

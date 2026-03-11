@@ -50,17 +50,18 @@ public class BaseVehiclePage extends BasePage {
             if (Objects.isNull(searchText)) {
                 throw new IllegalArgumentException("searchText must not be null");
             }
-            if (Objects.isNull(searchBox)) {
-                throw new IllegalStateException("Search box element is not initialized");
-            }
+            WebElement element = getSearchBox()
+                    .orElseThrow(() -> new IllegalStateException("Search box element is not initialized"));
+
             // clear existing text before sending new keys to avoid unexpected concatenation
             try {
-                searchBox.clear();
+                element.clear();
             } catch (Exception e) {
-                // not fatal; continue to sendKeys but log the event
+                // Not fatal; continue to sendKeys but log the event for diagnostics
                 logger.debug("Ignored exception while clearing search box: {}", e.getMessage(), e);
             }
-            searchBox.sendKeys(searchText);
+
+            element.sendKeys(searchText);
             logger.info("Search input provided successfully");
         } catch (IllegalArgumentException | IllegalStateException e) {
             logger.error("Invalid argument or state while searching vehicle: {}", e.getMessage(), e);
@@ -83,10 +84,9 @@ public class BaseVehiclePage extends BasePage {
     public void clickFilter() {
         logger.debug("Attempting to click filter button");
         try {
-            if (Objects.isNull(filterButton)) {
-                throw new IllegalStateException("Filter button element is not initialized");
-            }
-            filterButton.click();
+            WebElement element = getFilterButton()
+                    .orElseThrow(() -> new IllegalStateException("Filter button element is not initialized"));
+            safeClick(element, "filter button");
             logger.info("Filter button clicked successfully");
         } catch (IllegalStateException e) {
             logger.error("Invalid state while clicking filter button: {}", e.getMessage(), e);
@@ -109,10 +109,9 @@ public class BaseVehiclePage extends BasePage {
     public void clickExport() {
         logger.debug("Attempting to click export button");
         try {
-            if (Objects.isNull(exportButton)) {
-                throw new IllegalStateException("Export button element is not initialized");
-            }
-            exportButton.click();
+            WebElement element = getExportButton()
+                    .orElseThrow(() -> new IllegalStateException("Export button element is not initialized"));
+            safeClick(element, "export button");
             logger.info("Export button clicked successfully");
         } catch (IllegalStateException e) {
             logger.error("Invalid state while clicking export button: {}", e.getMessage(), e);
@@ -127,29 +126,48 @@ public class BaseVehiclePage extends BasePage {
     }
 
     /**
-     * Returns an Optional containing the search box WebElement if present.
+     * Safely clicks a WebElement while converting common Selenium exceptions into
+     * runtime exceptions with improved logging.
      *
-     * @return Optional of searchBox WebElement
+     * @param element the WebElement to click; assumed non-null
+     * @param name    a human-readable name for logging purposes
      */
-    public Optional<WebElement> getSearchBoxElement() {
+    private void safeClick(WebElement element, String name) {
+        try {
+            element.click();
+        } catch (NoSuchElementException | StaleElementReferenceException | ElementNotInteractableException e) {
+            logger.error("WebElement interaction failed while clicking {}: {}", name, e.getMessage(), e);
+            throw e;
+        } catch (Exception e) {
+            logger.error("Unexpected error while clicking {}: {}", name, e.getMessage(), e);
+            throw new RuntimeException("Unexpected error during click of " + name, e);
+        }
+    }
+
+    /**
+     * Returns the search box WebElement wrapped in an Optional.
+     *
+     * @return Optional containing searchBox if present, otherwise Optional.empty()
+     */
+    protected Optional<WebElement> getSearchBox() {
         return Optional.ofNullable(searchBox);
     }
 
     /**
-     * Returns an Optional containing the filter button WebElement if present.
+     * Returns the filter button WebElement wrapped in an Optional.
      *
-     * @return Optional of filterButton WebElement
+     * @return Optional containing filterButton if present, otherwise Optional.empty()
      */
-    public Optional<WebElement> getFilterButtonElement() {
+    protected Optional<WebElement> getFilterButton() {
         return Optional.ofNullable(filterButton);
     }
 
     /**
-     * Returns an Optional containing the export button WebElement if present.
+     * Returns the export button WebElement wrapped in an Optional.
      *
-     * @return Optional of exportButton WebElement
+     * @return Optional containing exportButton if present, otherwise Optional.empty()
      */
-    public Optional<WebElement> getExportButtonElement() {
+    protected Optional<WebElement> getExportButton() {
         return Optional.ofNullable(exportButton);
     }
 }
