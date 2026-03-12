@@ -12,19 +12,19 @@ import org.slf4j.LoggerFactory;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.stream.Collectors;
 
 /**
  * Page object representing the Executive Dashboard page.
  *
  * <p>
  * This class provides methods to interact with and query the dashboard UI elements
- * such as the dashboard title, profile icon and profile/logout dropdown options.
- * It depends on BasePage for WebDriver and wait utilities.
+ * such as the dashboard title and the profile icon. It depends on BasePage for WebDriver
+ * and wait utilities.
  * </p>
  *
  * <p>
  * All public methods are defensive: they log and handle exceptions rather than propagating raw Selenium exceptions.
+ * Use Optional-returning methods when a nullable value is expected.
  * </p>
  */
 public class DashboardPage extends BasePage {
@@ -104,6 +104,8 @@ public class DashboardPage extends BasePage {
      * <p>
      * Logs each attempt and throws an IllegalStateException if none of the strategies succeed.
      * </p>
+     *
+     * @throws IllegalStateException if the WebDriver is null or no locator could be clicked
      */
     public void clickProfileIcon() {
         if (Objects.isNull(driver)) {
@@ -127,146 +129,43 @@ public class DashboardPage extends BasePage {
         Exception lastException = null;
         for (By locator : locators) {
             try {
+                logger.debug("Attempting to click profile icon using locator: {}", locator);
                 WebElement element = wait.waitForElementClickable(locator);
-                if (Objects.nonNull(element)) {
+                if (element != null) {
                     element.click();
-                    logger.debug("Clicked profile icon using locator: {}", locator);
+                    logger.info("Successfully clicked profile icon using locator: {}", locator);
                     return;
                 } else {
-                    logger.debug("Locator returned null element (not clickable): {}", locator);
+                    logger.debug("Element was not clickable for locator: {}", locator);
                 }
-            } catch (StaleElementReferenceException | NoSuchElementException | TimeoutException e) {
+            } catch (TimeoutException | NoSuchElementException | StaleElementReferenceException e) {
                 lastException = e;
-                logger.debug("Attempt to click profile icon failed for locator {}: {}", locator, e.getMessage());
+                logger.debug("Locator did not yield a clickable element: {}", locator, e);
             } catch (Exception e) {
                 lastException = e;
-                logger.warn("Unexpected exception while attempting to click profile icon with locator {}: {}", locator, e.toString());
+                logger.warn("Unexpected exception when attempting to click profile icon with locator: {}", locator, e);
             }
         }
 
-        logger.error("Failed to click profile icon using any known locator");
-        if (Objects.nonNull(lastException)) {
+        // As a fallback, attempt the default configured profileIconLoc once more with an explicit log
+        try {
+            logger.debug("Attempting fallback click using configured profileIconLoc: {}", profileIconLoc);
+            WebElement fallback = wait.waitForElementClickable(profileIconLoc);
+            if (fallback != null) {
+                fallback.click();
+                logger.info("Successfully clicked profile icon using fallback locator: {}", profileIconLoc);
+                return;
+            }
+        } catch (Exception e) {
+            lastException = e;
+            logger.warn("Fallback attempt to click profile icon failed using locator: {}", profileIconLoc, e);
+        }
+
+        logger.error("Failed to click profile icon with all known locators");
+        if (lastException != null) {
             throw new IllegalStateException("Unable to click profile icon", lastException);
         } else {
-            throw new IllegalStateException("Unable to click profile icon: no matching element found");
-        }
-    }
-
-    /**
-     * Opens the profile dropdown by clicking the profile icon and waiting for the dropdown to appear.
-     *
-     * @return true if the dropdown became visible, false otherwise.
-     */
-    public boolean openProfileDropdown() {
-        try {
-            clickProfileIcon();
-            WebElement dropdown = wait.waitForElementVisible(profileDropdownLoc);
-            boolean visible = dropdown != null && dropdown.isDisplayed();
-            if (!visible) {
-                logger.debug("Profile dropdown not visible after clicking profile icon");
-            }
-            return visible;
-        } catch (Exception e) {
-            logger.warn("Failed to open profile dropdown", e);
-            return false;
-        }
-    }
-
-    /**
-     * Checks if profile dropdown is visible.
-     *
-     * @return true if visible, false otherwise.
-     */
-    public boolean isProfileDropdownVisible() {
-        try {
-            WebElement dropdown = wait.waitForElementVisible(profileDropdownLoc);
-            return dropdown != null && dropdown.isDisplayed();
-        } catch (Exception e) {
-            logger.debug("Error checking profile dropdown visibility", e);
-            return false;
-        }
-    }
-
-    /**
-     * Clicks the "Profile" option from the profile dropdown.
-     *
-     * @throws IllegalStateException if the option cannot be clicked.
-     */
-    public void clickProfileOption() {
-        if (!openProfileDropdown()) {
-            logger.error("Cannot open profile dropdown to click Profile option");
-            throw new IllegalStateException("Profile dropdown not open");
-        }
-
-        try {
-            WebElement option = wait.waitForElementClickable(profileOptionLoc);
-            if (Objects.nonNull(option)) {
-                option.click();
-                logger.info("Clicked Profile option from dropdown");
-            } else {
-                logger.error("Profile option element not found or not clickable");
-                throw new IllegalStateException("Profile option not found");
-            }
-        } catch (Exception e) {
-            logger.error("Failed to click Profile option", e);
-            throw new IllegalStateException("Failed to click Profile option", e);
-        }
-    }
-
-    /**
-     * Clicks the "Logout" option from the profile dropdown.
-     *
-     * @throws IllegalStateException if the option cannot be clicked.
-     */
-    public void clickLogoutOption() {
-        if (!openProfileDropdown()) {
-            logger.error("Cannot open profile dropdown to click Logout option");
-            throw new IllegalStateException("Profile dropdown not open");
-        }
-
-        try {
-            WebElement option = wait.waitForElementClickable(logoutOptionLoc);
-            if (Objects.nonNull(option)) {
-                option.click();
-                logger.info("Clicked Logout option from dropdown");
-            } else {
-                logger.error("Logout option element not found or not clickable");
-                throw new IllegalStateException("Logout option not found");
-            }
-        } catch (Exception e) {
-            logger.error("Failed to click Logout option", e);
-            throw new IllegalStateException("Failed to click Logout option", e);
-        }
-    }
-
-    /**
-     * Returns a list of visible texts for options found inside the profile dropdown.
-     *
-     * @return list of option texts, empty list if none found or on error.
-     */
-    public List<String> getProfileDropdownOptions() {
-        try {
-            WebElement dropdown = wait.waitForElementVisible(profileDropdownLoc);
-            if (Objects.isNull(dropdown)) {
-                logger.debug("Profile dropdown element not found when retrieving options");
-                return List.of();
-            }
-            List<WebElement> items = dropdown.findElements(By.xpath(".//li | .//*[self::a or self::button or self::div]"));
-            return items.stream()
-                        .filter(Objects::nonNull)
-                        .map(e -> {
-                            try {
-                                return e.getText() != null ? e.getText().trim() : "";
-                            } catch (StaleElementReferenceException sere) {
-                                logger.debug("Stale element when reading dropdown option text", sere);
-                                return "";
-                            }
-                        })
-                        .filter(s -> !s.isEmpty())
-                        .collect(Collectors.toList());
-        } catch (Exception e) {
-            logger.warn("Failed to retrieve profile dropdown options", e);
-            return List.of();
+            throw new IllegalStateException("Unable to click profile icon: no exception captured");
         }
     }
 }

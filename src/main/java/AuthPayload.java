@@ -8,7 +8,7 @@ import org.slf4j.LoggerFactory;
 /**
  * Payload object representing authentication credentials.
  *
- * <p>This immutable-friendly class holds a username and password for authentication operations.
+ * <p>This class holds a username and password for authentication operations.
  * It performs validation to ensure values are non-null and non-blank and provides both
  * Optional-based accessors for safer null handling and traditional getters/setters for
  * backward compatibility.</p>
@@ -17,7 +17,7 @@ import org.slf4j.LoggerFactory;
  * - Constructor and setters will throw IllegalArgumentException when supplied with null or blank values.
  * - Use getUsernameOptional() / getPasswordOptional() to obtain Optional-wrapped values.</p>
  */
-public class AuthPayload {
+public final class AuthPayload {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(AuthPayload.class);
 
@@ -159,9 +159,9 @@ public class AuthPayload {
     }
 
     /**
-     * Standard hashCode implementation.
+     * Standard hashCode implementation consistent with equals.
      *
-     * @return hash code
+     * @return hash code for this object
      */
     @Override
     public int hashCode() {
@@ -169,9 +169,9 @@ public class AuthPayload {
     }
 
     /**
-     * toString implementation that masks sensitive information.
+     * toString implementation which masks sensitive values.
      *
-     * @return string representation with masked password
+     * @return string representation with masked sensitive fields
      */
     @Override
     public String toString() {

@@ -123,11 +123,13 @@ public class AuthEndpoints extends BaseAPI {
      * </p>
      *
      * @return Response from the /auth/logout endpoint (may be null if RestClient returns null)
-     * @throws RuntimeException if an unexpected error occurs while performing the request
+     * @throws RuntimeException if an unexpected error occurs
      */
     public Response logout() {
         try {
             LOGGER.debug("logout called");
+
+            // Using POST with null payload to preserve typical logout semantics.
             Response response = client.post(LOGOUT_ENDPOINT, null, getRequestSpec());
             if (Objects.isNull(response)) {
                 LOGGER.warn("Received null Response from POST {}", LOGOUT_ENDPOINT);
@@ -149,7 +151,7 @@ public class AuthEndpoints extends BaseAPI {
     }
 
     /**
-     * Performs logout and returns an Optional-wrapped Response for callers that prefer null-safety.
+     * Performs logout and returns an Optional-wrapped Response.
      *
      * @return Optional containing the Response, or empty if the response was null
      */
