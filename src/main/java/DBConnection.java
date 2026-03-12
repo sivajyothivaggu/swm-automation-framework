@@ -1,6 +1,7 @@
 package com.swm.database;
 
 import com.swm.core.base.BaseDB;
+import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
@@ -36,6 +37,9 @@ public class DBConnection extends BaseDB {
      * containing the results. The returned ResultSet is a CachedRowSet so it does
      * not depend on an open JDBC Connection.
      *
+     * <p>Note: This method will attempt to connect if the underlying connection is
+     * null or closed and will disconnect after the query completes to free resources.
+     *
      * @param query the SQL SELECT query to execute; must not be null
      * @return a disconnected ResultSet containing the query results
      * @throws SQLException if a database access error occurs or the query is invalid
@@ -45,14 +49,17 @@ public class DBConnection extends BaseDB {
         Objects.requireNonNull(query, "query must not be null");
         logger.debug("Executing query: {}", query);
 
+        Connection conn = null;
         try {
             // Ensure we have an open connection
-            if (Objects.isNull(connection) || connection.isClosed()) {
+            conn = this.connection;
+            if (Objects.isNull(conn) || conn.isClosed()) {
                 logger.debug("Database connection is null or closed; attempting to connect.");
                 connect();
+                conn = this.connection;
             }
 
-            try (Statement stmt = connection.createStatement();
+            try (Statement stmt = conn.createStatement();
                  ResultSet rs = stmt.executeQuery(query)) {
 
                 CachedRowSet cachedRowSet = RowSetProvider.newFactory().createCachedRowSet();
@@ -81,6 +88,9 @@ public class DBConnection extends BaseDB {
     /**
      * Executes the provided SQL update (INSERT/UPDATE/DELETE) and returns the update count.
      *
+     * <p>Note: This method will attempt to connect if the underlying connection is
+     * null or closed and will disconnect after execution to free resources.
+     *
      * @param query the SQL update statement; must not be null
      * @return number of rows affected
      * @throws SQLException if a database access error occurs
@@ -90,13 +100,16 @@ public class DBConnection extends BaseDB {
         Objects.requireNonNull(query, "query must not be null");
         logger.debug("Executing update: {}", query);
 
+        Connection conn = null;
         try {
-            if (Objects.isNull(connection) || connection.isClosed()) {
+            conn = this.connection;
+            if (Objects.isNull(conn) || conn.isClosed()) {
                 logger.debug("Database connection is null or closed; attempting to connect.");
                 connect();
+                conn = this.connection;
             }
 
-            try (Statement stmt = connection.createStatement()) {
+            try (Statement stmt = conn.createStatement()) {
                 int result = stmt.executeUpdate(query);
                 logger.debug("Update executed. Rows affected: {}", result);
                 return result;
@@ -118,37 +131,41 @@ public class DBConnection extends BaseDB {
     }
 
     /**
-     * Converts a ResultSet into a List of Maps where each map represents a single row.
-     * The ResultSet is copied into a CachedRowSet first to ensure callers do not need to
-     * keep the original JDBC connection open.
+     * Converts the provided ResultSet into a List of Maps where each map represents
+     * a single row. Column names are used as keys and column values as map values.
      *
-     * @param resultSet the source ResultSet; must not be null
-     * @return a List of Maps representing rows; empty list if no rows
-     * @throws SQLException if a database access error occurs while reading the ResultSet
-     * @throws NullPointerException if resultSet is null
+     * <p>The method is null-safe and will return an empty list if rs is null. The
+     * method does not close the provided ResultSet; callers that supplied a non-
+     * CachedRowSet should close it as required.
+     *
+     * @param rs the ResultSet to convert; may be null
+     * @return a List of Maps representing rows; never null
+     * @throws SQLException if an error occurs while reading the ResultSet
      */
-    public List<Map<String, Object>> getResultList(ResultSet resultSet) throws SQLException {
-        Objects.requireNonNull(resultSet, "resultSet must not be null");
+    public List<Map<String, Object>> getResultList(ResultSet rs) throws SQLException {
         List<Map<String, Object>> rows = new ArrayList<>();
+        if (Objects.isNull(rs)) {
+            logger.debug("getResultList called with null ResultSet; returning empty list.");
+            return rows;
+        }
 
-        // Use a disconnected CachedRowSet to iterate safely
-        try (CachedRowSet cachedRowSet = RowSetProvider.newFactory().createCachedRowSet()) {
-            cachedRowSet.populate(resultSet);
-            ResultSetMetaData metaData = cachedRowSet.getMetaData();
+        try {
+            ResultSetMetaData metaData = rs.getMetaData();
             int columnCount = metaData.getColumnCount();
 
-            while (cachedRowSet.next()) {
+            while (rs.next()) {
                 Map<String, Object> row = new HashMap<>(columnCount);
-                for (int i = 1; i <= columnCount; i++) {
-                    String columnLabel = metaData.getColumnLabel(i);
-                    if (columnLabel == null || columnLabel.isEmpty()) {
-                        columnLabel = metaData.getColumnName(i);
+                for (int col = 1; col <= columnCount; col++) {
+                    String columnName = metaData.getColumnLabel(col);
+                    if (columnName == null || columnName.isEmpty()) {
+                        columnName = metaData.getColumnName(col);
                     }
-                    row.put(columnLabel, cachedRowSet.getObject(i));
+                    Object value = rs.getObject(col);
+                    row.put(columnName, value);
                 }
                 rows.add(row);
             }
-            logger.debug("Converted ResultSet to list with {} rows.", rows.size());
+            logger.debug("Converted ResultSet to list of maps. Rows count: {}", rows.size());
             return rows;
         } catch (SQLException sqle) {
             logger.error("SQLException while converting ResultSet to list: {}", sqle.getMessage(), sqle);

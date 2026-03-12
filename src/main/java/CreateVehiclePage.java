@@ -5,6 +5,7 @@ import java.util.Optional;
 
 import org.openqa.selenium.ElementNotInteractableException;
 import org.openqa.selenium.NoSuchElementException;
+import org.openqa.selenium.StaleElementReferenceException;
 import org.openqa.selenium.WebDriverException;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.support.FindBy;
@@ -111,81 +112,102 @@ public class CreateVehiclePage extends BasePage {
                         return new NoSuchElementException(msg);
                     });
 
-            // Interact with the form elements
+            // Interact with the form elements using safe helpers
+            interactWithInputElement(numberElement, number, "vehicleNumber");
+            interactWithInputElement(typeElement, type, "vehicleType");
+            interactWithInputElement(capacityElement, cap, "capacity");
+
             try {
-                numberElement.clear();
-                numberElement.sendKeys(number);
-                logger.debug("Set vehicle number to '{}'", number);
-
-                typeElement.clear();
-                typeElement.sendKeys(type);
-                logger.debug("Set vehicle type to '{}'", type);
-
-                capacityElement.clear();
-                capacityElement.sendKeys(cap);
-                logger.debug("Set vehicle capacity to '{}'", cap);
-
                 submitEl.click();
-                logger.info("Clicked submit button to create vehicle '{}'", number);
-            } catch (ElementNotInteractableException enie) {
-                String msg = "One or more elements were not interactable while creating vehicle";
-                logger.error(msg, enie);
-                throw new IllegalStateException(msg, enie);
-            } catch (WebDriverException wde) {
-                String msg = "WebDriver error occurred while interacting with create vehicle form";
-                logger.error(msg, wde);
-                throw new IllegalStateException(msg, wde);
-            } catch (RuntimeException re) {
-                String msg = "Unexpected error occurred while interacting with create vehicle form";
-                logger.error(msg, re);
-                throw new IllegalStateException(msg, re);
+                logger.info("Clicked submit button for creating vehicle [{}]", number);
+            } catch (ElementNotInteractableException e) {
+                String msg = "Submit button was not interactable";
+                logger.error(msg, e);
+                throw new IllegalStateException(msg, e);
+            } catch (WebDriverException e) {
+                String msg = "WebDriverException while clicking submit button";
+                logger.error(msg, e);
+                throw new IllegalStateException(msg, e);
             }
-        } catch (NoSuchElementException nse) {
-            String msg = "Required form element missing or not ready for createVehicle";
-            logger.error(msg, nse);
-            throw new IllegalStateException(msg, nse);
-        } catch (IllegalStateException ise) {
-            // Already logged above with context; propagate
-            throw ise;
-        } catch (RuntimeException re) {
-            String msg = "Unexpected runtime error in createVehicle";
-            logger.error(msg, re);
-            throw new IllegalStateException(msg, re);
+
+        } catch (NoSuchElementException | ElementNotInteractableException e) {
+            // These are expected issues when elements are missing or not interactable
+            logger.error("Failed to interact with Create Vehicle page elements", e);
+            throw new IllegalStateException("Failed to interact with Create Vehicle page elements", e);
+        } catch (WebDriverException e) {
+            // Catch broader WebDriver issues and wrap them
+            logger.error("Unexpected WebDriver error while creating vehicle", e);
+            throw new IllegalStateException("Unexpected WebDriver error while creating vehicle", e);
+        } catch (RuntimeException e) {
+            // Defensive: log any other runtime exceptions and rethrow
+            logger.error("Unexpected error in createVehicle", e);
+            throw e;
         }
     }
 
     /**
-     * Ensure that the provided WebElement reference is non-null and interactable.
+     * Ensures a WebElement is present (not null), displayed and enabled (interactable).
      *
-     * <p>This helper method centralizes the null and state checks and returns an Optional
-     * containing the element if it is safe to interact with, or an empty Optional
-     * otherwise. Any WebDriver related exceptions are logged and result in an empty Optional.</p>
+     * <p>This method will catch common Selenium exceptions like StaleElementReferenceException
+     * and ElementNotInteractableException, log them, and return Optional.empty() in such cases.</p>
      *
-     * @param element the WebElement reference injected by Selenium
-     * @param name    human-friendly name for logging
-     * @return Optional containing the element if present and interactable; otherwise Optional.empty()
+     * @param element the WebElement to verify; may be null if injection failed
+     * @param name    friendly name of the element for logging
+     * @return Optional of the WebElement if present and interactable; Optional.empty() otherwise
      */
     private Optional<WebElement> ensureElementPresentAndInteractable(WebElement element, String name) {
         if (Objects.isNull(element)) {
-            logger.warn("Element '{}' is null (not injected or not present in DOM).", name);
+            logger.warn("Element reference for '{}' is null (likely not injected).", name);
             return Optional.empty();
         }
         try {
-            if (!element.isDisplayed()) {
-                logger.warn("Element '{}' is present but not displayed.", name);
+            boolean displayed = element.isDisplayed();
+            boolean enabled = element.isEnabled();
+            if (displayed && enabled) {
+                return Optional.of(element);
+            } else {
+                logger.warn("Element '{}' present but not interactable. displayed={}, enabled={}", name, displayed, enabled);
                 return Optional.empty();
             }
-            if (!element.isEnabled()) {
-                logger.warn("Element '{}' is present but not enabled.", name);
-                return Optional.empty();
-            }
-            return Optional.of(element);
-        } catch (NoSuchElementException | ElementNotInteractableException | WebDriverException ex) {
-            logger.error("Error while checking element '{}': {}", name, ex.getMessage(), ex);
+        } catch (StaleElementReferenceException e) {
+            logger.warn("Element '{}' is stale and cannot be interacted with.", name, e);
             return Optional.empty();
-        } catch (RuntimeException rte) {
-            logger.error("Unexpected error while checking element '{}': {}", name, rte.getMessage(), rte);
+        } catch (ElementNotInteractableException e) {
+            logger.warn("Element '{}' exists but is not interactable.", name, e);
             return Optional.empty();
+        } catch (NoSuchElementException e) {
+            logger.warn("Element '{}' could not be found in the DOM.", name, e);
+            return Optional.empty();
+        } catch (WebDriverException e) {
+            logger.error("WebDriverException when checking element '{}'", name, e);
+            return Optional.empty();
+        }
+    }
+
+    /**
+     * Safely clears and sends text to an input element.
+     *
+     * @param element the input WebElement; expected to be present and interactable
+     * @param value   the value to set
+     * @param name    friendly name used for logging
+     */
+    private void interactWithInputElement(WebElement element, String value, String name) {
+        try {
+            element.clear();
+            element.sendKeys(value);
+            logger.debug("Set '{}': {}", name, value);
+        } catch (IllegalArgumentException e) {
+            String msg = String.format("Provided value for '%s' was invalid: %s", name, value);
+            logger.error(msg, e);
+            throw new IllegalArgumentException(msg, e);
+        } catch (ElementNotInteractableException e) {
+            String msg = String.format("Element '%s' was not interactable when attempting to enter value.", name);
+            logger.error(msg, e);
+            throw new IllegalStateException(msg, e);
+        } catch (WebDriverException e) {
+            String msg = String.format("WebDriver error while interacting with element '%s'.", name);
+            logger.error(msg, e);
+            throw new IllegalStateException(msg, e);
         }
     }
 }

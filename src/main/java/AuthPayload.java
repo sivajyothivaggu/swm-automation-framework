@@ -169,9 +169,9 @@ public final class AuthPayload {
     }
 
     /**
-     * Returns a string representation with sensitive fields masked.
+     * toString implementation that avoids revealing sensitive information.
      *
-     * @return string representation
+     * @return masked string representation
      */
     @Override
     public String toString() {

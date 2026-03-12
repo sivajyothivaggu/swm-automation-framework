@@ -24,10 +24,24 @@ import java.util.Optional;
  */
 public class BaseAPI {
 
+    /**
+     * Logger for this class.
+     */
     private static final Logger logger = LoggerFactory.getLogger(BaseAPI.class);
 
+    /**
+     * Header name for Content-Type.
+     */
     private static final String HEADER_CONTENT_TYPE = "Content-Type";
+
+    /**
+     * Header name for Accept.
+     */
     private static final String HEADER_ACCEPT = "Accept";
+
+    /**
+     * Content type value for JSON payloads.
+     */
     private static final String APPLICATION_JSON = "application/json";
 
     /**
@@ -37,7 +51,7 @@ public class BaseAPI {
      * Behavior:
      * - Validates that the API URL is present and non-blank in configuration. If missing, logs an error
      *   and throws an IllegalStateException to fail fast.
-     * - Validates that the API URL is a well-formed URI with a scheme.
+     * - Validates that the API URL is a well-formed URI with an allowed scheme (http or https).
      * - Sets RestAssured.baseURI to the configured API URL.
      * - Builds the RequestSpecification and returns it.
      *
@@ -67,13 +81,22 @@ public class BaseAPI {
         try {
             // Validate the URL is well-formed and has a scheme (http/https)
             final URI uri = new URI(apiUrl);
-            if (Objects.isNull(uri.getScheme()) || uri.getScheme().isBlank()) {
-                logger.error("Configured API URL '{}' does not contain a valid scheme", apiUrl);
+
+            final String scheme = uri.getScheme();
+            if (Objects.isNull(scheme) || scheme.isBlank()) {
+                logger.error("Configured API URL '{}' does not contain a scheme", apiUrl);
                 throw new IllegalStateException("API URL is invalid: missing scheme");
             }
 
-            // Use the normalized URI string to avoid unexpected whitespace or encoding issues
-            RestAssured.baseURI = uri.toString();
+            final String schemeLower = scheme.toLowerCase();
+            if (!isAllowedScheme(schemeLower)) {
+                logger.error("Configured API URL '{}' uses unsupported scheme '{}'", apiUrl, scheme);
+                throw new IllegalStateException("API URL is invalid: unsupported scheme");
+            }
+
+            // Normalize the URI to avoid unexpected whitespace or encoding issues
+            final String normalizedBaseUri = uri.toASCIIString();
+            RestAssured.baseURI = normalizedBaseUri;
 
             final RequestSpecification spec = RestAssured.given()
                     .header(HEADER_CONTENT_TYPE, APPLICATION_JSON)
@@ -98,5 +121,15 @@ public class BaseAPI {
             logger.error("Failed to create RequestSpecification for base URI: {}", apiUrl, e);
             throw new RuntimeException("Failed to build RequestSpecification", e);
         }
+    }
+
+    /**
+     * Checks whether the provided URI scheme is allowed for API base URIs.
+     *
+     * @param schemeLower the scheme in lower-case (non-null)
+     * @return true if the scheme is allowed (http or https), false otherwise
+     */
+    private boolean isAllowedScheme(String schemeLower) {
+        return "http".equals(schemeLower) || "https".equals(schemeLower);
     }
 }
