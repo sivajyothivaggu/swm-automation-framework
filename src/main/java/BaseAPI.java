@@ -37,11 +37,11 @@ public class BaseAPI {
      * Behavior:
      * - Validates that the API URL is present and non-blank in configuration. If missing, logs an error
      *   and throws an IllegalStateException to fail fast.
-     * - Validates that the API URL is a well-formed URI with a scheme.
+     * - Validates that the API URL is a well-formed URI with a supported scheme (http or https).
      * - Sets RestAssured.baseURI to the configured API URL.
      * - Builds the RequestSpecification and returns it.
      *
-     * Throws:
+     * Exceptions thrown:
      * - IllegalStateException if API URL is null, blank, or invalid.
      * - RuntimeException if building the RequestSpecification fails for any other reason.
      *
@@ -51,7 +51,12 @@ public class BaseAPI {
         final String rawApiUrl;
         try {
             rawApiUrl = ConfigManager.getApiUrl();
+            if (Objects.isNull(rawApiUrl)) {
+                logger.error("ConfigManager.getApiUrl() returned null");
+                throw new IllegalStateException("API URL is not configured (null)");
+            }
         } catch (Exception e) {
+            // Catch any unchecked exceptions from the config manager and rethrow as IllegalStateException
             logger.error("Failed to retrieve API URL from ConfigManager", e);
             throw new IllegalStateException("Unable to retrieve API URL from configuration", e);
         }
@@ -61,15 +66,22 @@ public class BaseAPI {
                 .filter(s -> !s.isBlank())
                 .orElseThrow(() -> {
                     logger.error("Configured API URL is null or blank. Check ConfigManager.getApiUrl()");
-                    return new IllegalStateException("API URL is not configured");
+                    return new IllegalStateException("API URL is not configured or is blank");
                 });
 
         try {
-            // Validate the URL is well-formed and has a scheme (http/https)
+            // Validate the URL is well-formed and has a supported scheme (http/https)
             final URI uri = new URI(apiUrl);
-            if (Objects.isNull(uri.getScheme()) || uri.getScheme().isBlank()) {
+            final String scheme = uri.getScheme();
+            if (Objects.isNull(scheme) || scheme.isBlank()) {
                 logger.error("Configured API URL '{}' does not contain a valid scheme", apiUrl);
                 throw new IllegalStateException("API URL is invalid: missing scheme");
+            }
+
+            final String schemeLower = scheme.toLowerCase();
+            if (!"http".equals(schemeLower) && !"https".equals(schemeLower)) {
+                logger.error("Configured API URL '{}' uses unsupported scheme '{}'", apiUrl, scheme);
+                throw new IllegalStateException("API URL uses unsupported scheme: " + scheme);
             }
 
             // Use the normalized URI string to avoid unexpected whitespace or encoding issues
@@ -83,6 +95,12 @@ public class BaseAPI {
                 logger.debug("Built RequestSpecification for base URI: {}", RestAssured.baseURI);
             } else {
                 logger.info("RequestSpecification created for base URI");
+            }
+
+            // Defensive check: ensure spec is not null (RestAssured.given() should not return null)
+            if (Objects.isNull(spec)) {
+                logger.error("RequestSpecification creation returned null for base URI: {}", RestAssured.baseURI);
+                throw new RuntimeException("Failed to create RequestSpecification");
             }
 
             return spec;

@@ -54,7 +54,7 @@ public class BaseDB {
      * @throws SQLException if a database access error occurs or required configuration is missing
      */
     protected synchronized void connect() throws SQLException {
-        // If a connection already exists and is valid, reuse it.
+        // Reuse existing connection if valid
         try {
             if (!Objects.isNull(connectionInstance) && !connectionInstance.isClosed()) {
                 LOGGER.log(Level.FINE, "Reusing existing database connection.");
@@ -62,7 +62,8 @@ public class BaseDB {
             }
         } catch (SQLException ex) {
             // If checking isClosed() failed, clear reference and continue to create a new connection.
-            LOGGER.log(Level.WARNING, "Error checking existing connection state; will attempt to (re)connect.", ex);
+            LOGGER.log(Level.WARNING,
+                    "Error checking existing connection state; will attempt to (re)connect.", ex);
             connectionInstance = null;
         }
 
@@ -78,14 +79,14 @@ public class BaseDB {
         }
 
         // Do not log sensitive information such as the password.
-        LOGGER.log(Level.CONFIG, "Attempting database connection to URL: {0} with user: {1}", new Object[] { dbUrl, dbUser });
+        LOGGER.log(Level.CONFIG, "Attempting database connection to URL: {0} with user: {1}",
+                new Object[] { dbUrl, dbUser });
 
         try {
             connectionInstance = DriverManager.getConnection(dbUrl, dbUser, dbPassword);
             LOGGER.log(Level.FINE, "Database connection established.");
         } catch (SQLException ex) {
             LOGGER.log(Level.SEVERE, "Failed to establish database connection.", ex);
-            // Ensure reference is cleared on failure.
             connectionInstance = null;
             throw ex;
         } catch (RuntimeException ex) {
@@ -110,56 +111,67 @@ public class BaseDB {
             return;
         }
 
-        boolean closedSuccessfully = false;
         try {
             if (!connectionInstance.isClosed()) {
                 try {
                     connectionInstance.close();
-                    closedSuccessfully = true;
-                    LOGGER.log(Level.FINE, "Database connection closed.");
+                    LOGGER.log(Level.FINE, "Database connection closed successfully.");
                 } catch (SQLException ex) {
                     LOGGER.log(Level.SEVERE, "Error while closing database connection.", ex);
                     throw ex;
                 }
             } else {
-                LOGGER.log(Level.FINE, "Database connection was already closed.");
-                closedSuccessfully = true;
+                LOGGER.log(Level.FINE, "Connection already closed.");
             }
-        } catch (SQLException ex) {
-            // propagate SQLExceptions as-is after logging
-            throw ex;
-        } catch (Exception ex) {
-            // Catch non-SQLExceptions that may occur during close and rethrow as SQLException
-            LOGGER.log(Level.SEVERE, "Unexpected error while closing database connection.", ex);
-            throw new SQLException("Unexpected error while closing database connection.", ex);
         } finally {
-            // Ensure reference is cleared so subsequent operations know there is no active connection.
+            // Ensure the reference is cleared regardless of close outcome
             connectionInstance = null;
-            if (!closedSuccessfully) {
-                LOGGER.log(Level.FINER, "Connection reference cleared after attempted close.");
-            }
         }
     }
 
     /**
-     * Returns an Optional containing the current Connection if present.
+     * Returns an Optional containing the current live {@link Connection} if available and open,
+     * otherwise returns an empty Optional.
      *
-     * @return Optional of Connection
+     * This method is synchronized to provide a consistent snapshot of the connection state.
+     *
+     * @return Optional containing current Connection if present and open, otherwise Optional.empty()
      */
-    protected Optional<Connection> getConnection() {
-        return Optional.ofNullable(connectionInstance);
+    protected synchronized Optional<Connection> getConnection() {
+        if (Objects.isNull(connectionInstance)) {
+            LOGGER.log(Level.FINER, "getConnection: no active connection.");
+            return Optional.empty();
+        }
+
+        try {
+            if (connectionInstance.isClosed()) {
+                LOGGER.log(Level.FINER, "getConnection: connection is closed.");
+                connectionInstance = null;
+                return Optional.empty();
+            }
+            return Optional.of(connectionInstance);
+        } catch (SQLException ex) {
+            LOGGER.log(Level.WARNING, "Error while verifying connection state in getConnection().", ex);
+            // Clear reference to avoid returning a broken connection
+            connectionInstance = null;
+            return Optional.empty();
+        }
     }
 
     /**
-     * Convenience helper to determine if the current connection is open and usable.
+     * Returns true if a live connection is currently established and open.
      *
-     * @return true if a connection exists and is not closed, false otherwise
+     * @return boolean indicating connection is present and open
      */
     protected synchronized boolean isConnected() {
+        if (Objects.isNull(connectionInstance)) {
+            return false;
+        }
         try {
-            return !Objects.isNull(connectionInstance) && !connectionInstance.isClosed();
+            return !connectionInstance.isClosed();
         } catch (SQLException ex) {
-            LOGGER.log(Level.WARNING, "Failed to determine connection state.", ex);
+            LOGGER.log(Level.WARNING, "Error while checking connection state in isConnected().", ex);
+            connectionInstance = null;
             return false;
         }
     }

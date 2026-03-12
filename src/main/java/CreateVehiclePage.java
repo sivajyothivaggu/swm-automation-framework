@@ -22,7 +22,7 @@ import com.swm.core.base.BasePage;
  * functionality of entering vehicle details and submitting the form.</p>
  *
  * <p>Thread-safety: This page object assumes it is used in the context
- * of a single webdriver/session thread as typical for Selenium-based tests.</p>
+ * of a single WebDriver/session thread as typical for Selenium-based tests.</p>
  */
 public class CreateVehiclePage extends BasePage {
     private static final Logger logger = LoggerFactory.getLogger(CreateVehiclePage.class);
@@ -69,19 +69,19 @@ public class CreateVehiclePage extends BasePage {
     public void createVehicle(String number, String type, String cap) {
         // Validate parameters using Objects.isNull for null checks
         if (Objects.isNull(number) || number.isBlank()) {
-            logger.error("createVehicle called with invalid 'number': {}", number);
+            logger.error("createVehicle called with invalid 'number': '{}'", number);
             throw new IllegalArgumentException("Parameter 'number' must not be null or blank");
         }
         if (Objects.isNull(type) || type.isBlank()) {
-            logger.error("createVehicle called with invalid 'type': {}", type);
+            logger.error("createVehicle called with invalid 'type': '{}'", type);
             throw new IllegalArgumentException("Parameter 'type' must not be null or blank");
         }
         if (Objects.isNull(cap) || cap.isBlank()) {
-            logger.error("createVehicle called with invalid 'cap': {}", cap);
+            logger.error("createVehicle called with invalid 'cap': '{}'", cap);
             throw new IllegalArgumentException("Parameter 'cap' must not be null or blank");
         }
 
-        try {
+        try (LogScope ignored = new LogScope("createVehicle")) {
             // Verify elements are injected and interactable; obtain references via Optional
             WebElement numberElement = ensureElementPresentAndInteractable(vehicleNumber, "vehicleNumber")
                     .orElseThrow(() -> {
@@ -111,81 +111,151 @@ public class CreateVehiclePage extends BasePage {
                         return new NoSuchElementException(msg);
                     });
 
-            // Interact with the form elements
-            try {
-                numberElement.clear();
-                numberElement.sendKeys(number);
-                logger.debug("Set vehicle number to '{}'", number);
+            // Interact with the form elements using robust helper methods
+            safeClearAndType(numberElement, number, "vehicleNumber");
+            safeClearAndType(typeElement, type, "vehicleType");
+            safeClearAndType(capacityElement, cap, "capacity");
 
-                typeElement.clear();
-                typeElement.sendKeys(type);
-                logger.debug("Set vehicle type to '{}'", type);
+            // Click submit
+            safeClick(submitEl, "submitButton");
 
-                capacityElement.clear();
-                capacityElement.sendKeys(cap);
-                logger.debug("Set vehicle capacity to '{}'", cap);
-
-                submitEl.click();
-                logger.info("Clicked submit button to create vehicle '{}'", number);
-            } catch (ElementNotInteractableException enie) {
-                String msg = "One or more elements were not interactable while creating vehicle";
-                logger.error(msg, enie);
-                throw new IllegalStateException(msg, enie);
-            } catch (WebDriverException wde) {
-                String msg = "WebDriver error occurred while interacting with create vehicle form";
-                logger.error(msg, wde);
-                throw new IllegalStateException(msg, wde);
-            } catch (RuntimeException re) {
-                String msg = "Unexpected error occurred while interacting with create vehicle form";
-                logger.error(msg, re);
-                throw new IllegalStateException(msg, re);
-            }
-        } catch (NoSuchElementException nse) {
-            String msg = "Required form element missing or not ready for createVehicle";
-            logger.error(msg, nse);
-            throw new IllegalStateException(msg, nse);
-        } catch (IllegalStateException ise) {
-            // Already logged above with context; propagate
-            throw ise;
-        } catch (RuntimeException re) {
-            String msg = "Unexpected runtime error in createVehicle";
-            logger.error(msg, re);
-            throw new IllegalStateException(msg, re);
+            logger.info("createVehicle completed successfully for number='{}', type='{}', cap='{}'",
+                    number, type, cap);
+        } catch (NoSuchElementException | ElementNotInteractableException ex) {
+            logger.error("Element interaction failed in createVehicle: {}", ex.getMessage(), ex);
+            throw new IllegalStateException("Failed to interact with page elements: " + ex.getMessage(), ex);
+        } catch (WebDriverException ex) {
+            logger.error("WebDriver error in createVehicle: {}", ex.getMessage(), ex);
+            throw new IllegalStateException("WebDriver error while creating vehicle: " + ex.getMessage(), ex);
+        } catch (RuntimeException ex) {
+            logger.error("Unexpected error in createVehicle: {}", ex.getMessage(), ex);
+            throw new IllegalStateException("Unexpected error while creating vehicle: " + ex.getMessage(), ex);
         }
     }
 
     /**
-     * Ensure that the provided WebElement reference is non-null and interactable.
+     * Ensures that the provided WebElement is present and interactable.
      *
-     * <p>This helper method centralizes the null and state checks and returns an Optional
-     * containing the element if it is safe to interact with, or an empty Optional
-     * otherwise. Any WebDriver related exceptions are logged and result in an empty Optional.</p>
-     *
-     * @param element the WebElement reference injected by Selenium
-     * @param name    human-friendly name for logging
-     * @return Optional containing the element if present and interactable; otherwise Optional.empty()
+     * @param element the WebElement instance injected by Selenium (may be null)
+     * @param name    a descriptive name used for logging
+     * @return an Optional containing the WebElement if present and interactable; otherwise Optional.empty()
      */
     private Optional<WebElement> ensureElementPresentAndInteractable(WebElement element, String name) {
-        if (Objects.isNull(element)) {
-            logger.warn("Element '{}' is null (not injected or not present in DOM).", name);
-            return Optional.empty();
-        }
         try {
-            if (!element.isDisplayed()) {
-                logger.warn("Element '{}' is present but not displayed.", name);
+            if (Objects.isNull(element)) {
+                logger.warn("Element '{}' is null (not injected)", name);
                 return Optional.empty();
             }
-            if (!element.isEnabled()) {
-                logger.warn("Element '{}' is present but not enabled.", name);
+            // Some elements can be present but not visible/enabled; check both.
+            boolean displayed;
+            boolean enabled;
+            try {
+                displayed = element.isDisplayed();
+                enabled = element.isEnabled();
+            } catch (WebDriverException e) {
+                // If querying the element state throws, treat as not interactable
+                logger.warn("Unable to query display/enabled state for '{}': {}", name, e.getMessage());
+                return Optional.empty();
+            }
+
+            if (!displayed) {
+                logger.warn("Element '{}' is not displayed", name);
+                return Optional.empty();
+            }
+            if (!enabled) {
+                logger.warn("Element '{}' is not enabled", name);
                 return Optional.empty();
             }
             return Optional.of(element);
-        } catch (NoSuchElementException | ElementNotInteractableException | WebDriverException ex) {
-            logger.error("Error while checking element '{}': {}", name, ex.getMessage(), ex);
+        } catch (NoSuchElementException e) {
+            logger.warn("NoSuchElement when checking '{}': {}", name, e.getMessage());
             return Optional.empty();
-        } catch (RuntimeException rte) {
-            logger.error("Unexpected error while checking element '{}': {}", name, rte.getMessage(), rte);
+        } catch (WebDriverException e) {
+            logger.warn("WebDriverException when checking '{}': {}", name, e.getMessage());
             return Optional.empty();
+        } catch (Exception e) {
+            logger.warn("Unexpected exception when checking '{}': {}", name, e.getMessage(), e);
+            return Optional.empty();
+        }
+    }
+
+    /**
+     * Clears the field and types the provided value into the WebElement in a safe manner.
+     *
+     * @param element the target input element
+     * @param value   the value to enter
+     * @param name    a descriptive name used for logging
+     * @throws ElementNotInteractableException when the element cannot be interacted with
+     * @throws WebDriverException              when a lower-level WebDriver error occurs
+     */
+    private void safeClearAndType(WebElement element, String value, String name) {
+        Objects.requireNonNull(element, "WebElement must not be null for " + name);
+        try {
+            // Clear existing text if possible
+            try {
+                element.clear();
+            } catch (UnsupportedOperationException | WebDriverException e) {
+                // Some elements may not support clear; ignore if typing will overwrite
+                logger.debug("clear() not supported or failed for '{}': {}", name, e.getMessage());
+            }
+
+            element.sendKeys(value);
+            logger.debug("Entered value into '{}'", name);
+        } catch (ElementNotInteractableException e) {
+            logger.error("Element '{}' not interactable when sending keys: {}", name, e.getMessage(), e);
+            throw e;
+        } catch (WebDriverException e) {
+            logger.error("WebDriverException while typing into '{}': {}", name, e.getMessage(), e);
+            throw e;
+        } catch (RuntimeException e) {
+            logger.error("Unexpected exception while typing into '{}': {}", name, e.getMessage(), e);
+            throw e;
+        }
+    }
+
+    /**
+     * Performs a safe click on the provided WebElement with logging and error handling.
+     *
+     * @param element the button/element to click
+     * @param name    a descriptive name used for logging
+     * @throws ElementNotInteractableException when the element cannot be clicked
+     * @throws WebDriverException              when a lower-level WebDriver error occurs
+     */
+    private void safeClick(WebElement element, String name) {
+        Objects.requireNonNull(element, "WebElement must not be null for " + name);
+        try {
+            element.click();
+            logger.debug("Clicked element '{}'", name);
+        } catch (ElementNotInteractableException e) {
+            logger.error("Element '{}' not interactable when clicking: {}", name, e.getMessage(), e);
+            throw e;
+        } catch (WebDriverException e) {
+            logger.error("WebDriverException while clicking '{}': {}", name, e.getMessage(), e);
+            throw e;
+        } catch (RuntimeException e) {
+            logger.error("Unexpected exception while clicking '{}': {}", name, e.getMessage(), e);
+            throw e;
+        }
+    }
+
+    /**
+     * Simple AutoCloseable scope used to demonstrate try-with-resources usage for entry/exit logging.
+     * This does not manage any external resource; it's solely for structured logging.
+     */
+    private static final class LogScope implements AutoCloseable {
+        private final String name;
+        private final long startNanos;
+
+        LogScope(String name) {
+            this.name = Objects.requireNonNull(name, "name");
+            this.startNanos = System.nanoTime();
+            logger.debug("Entering scope '{}'", this.name);
+        }
+
+        @Override
+        public void close() {
+            long elapsedMs = (System.nanoTime() - startNanos) / 1_000_000;
+            logger.debug("Exiting scope '{}' after {} ms", this.name, elapsedMs);
         }
     }
 }

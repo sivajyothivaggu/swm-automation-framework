@@ -8,16 +8,16 @@ import java.util.logging.Logger;
 /**
  * ConfigManager is a centralized, thread-safe utility for accessing environment-specific configuration values.
  *
- * <p>Responsibilities:
+ * Responsibilities:
  * - Initialize EnvironmentConfig based on the "env" system property (default "qa").
  * - Expose accessor methods for URL, API URL, DB credentials and browser type.
  *
- * <p>Behavior:
+ * Behavior:
  * - Initialization problems are logged. Accessing configuration before successful initialization
  *   results in a clear IllegalStateException for strict getters, or Optional.empty() for optional getters.
  * - Supports explicit re-initialization via {@link #reload(String, String)}.
  *
- * <p>This class is final and has a private constructor to prevent instantiation.
+ * This class is final and has a private constructor to prevent instantiation.
  */
 public final class ConfigManager {
 
@@ -49,11 +49,16 @@ public final class ConfigManager {
      */
     private static void initializeFromSystemProperties() {
         try {
-            final String envName = System.getProperty("env", DEFAULT_ENV);
-            final String browserName = System.getProperty("browser", DEFAULT_BROWSER);
+            final String rawEnv = System.getProperty("env", DEFAULT_ENV);
+            final String rawBrowser = System.getProperty("browser", DEFAULT_BROWSER);
+
+            final String envName = (rawEnv == null || rawEnv.trim().isEmpty()) ? DEFAULT_ENV : rawEnv.trim();
+            final String browserName = (rawBrowser == null || rawBrowser.trim().isEmpty()) ? DEFAULT_BROWSER : rawBrowser.trim();
+
             final EnvironmentConfig localConfig = new EnvironmentConfig(envName);
             config = localConfig;
-            browser = (browserName == null || browserName.trim().isEmpty()) ? DEFAULT_BROWSER : browserName;
+            browser = browserName;
+
             LOGGER.log(Level.CONFIG, "ConfigManager initialized for environment: {0}, browser: {1}",
                     new Object[]{envName, browser});
         } catch (Exception e) {
@@ -77,11 +82,11 @@ public final class ConfigManager {
             throw new IllegalArgumentException("envName must not be empty");
         }
         try {
-            final EnvironmentConfig newConfig = new EnvironmentConfig(envName);
+            final EnvironmentConfig newConfig = new EnvironmentConfig(envName.trim());
             config = newConfig;
-            browser = (browserName == null || browserName.trim().isEmpty()) ? DEFAULT_BROWSER : browserName;
+            browser = (browserName == null || browserName.trim().isEmpty()) ? DEFAULT_BROWSER : browserName.trim();
             LOGGER.log(Level.INFO, "ConfigManager reloaded for environment: {0}, browser: {1}",
-                    new Object[]{envName, browser});
+                    new Object[]{envName.trim(), browser});
         } catch (Exception e) {
             LOGGER.log(Level.SEVERE, "Failed to reload EnvironmentConfig for environment: " + envName, e);
             throw new RuntimeException("Failed to reload configuration for environment: " + envName, e);
@@ -107,69 +112,82 @@ public final class ConfigManager {
      *
      * @return the environment URL
      * @throws IllegalStateException if configuration was not initialized
-     * @throws RuntimeException      if retrieving the URL from the config fails
+     * @throws RuntimeException      if retrieving the URL from the config fails or value is null
      */
     public static String getUrl() {
         ensureConfigAvailable("getUrl");
         try {
             final String value = config.getUrl();
-            LOGGER.log(Level.FINE, "Retrieved URL from config");
+            if (Objects.isNull(value) || value.trim().isEmpty()) {
+                final String msg = "Environment URL is not set in configuration.";
+                LOGGER.log(Level.SEVERE, msg);
+                throw new RuntimeException(msg);
+            }
             return value;
+        } catch (RuntimeException e) {
+            // rethrow runtime exceptions as-is
+            throw e;
         } catch (Exception e) {
-            LOGGER.log(Level.SEVERE, "Error retrieving URL from config", e);
-            throw new RuntimeException("Unable to get URL from config", e);
+            LOGGER.log(Level.SEVERE, "Failed to retrieve URL from configuration", e);
+            throw new RuntimeException("Failed to retrieve URL from configuration", e);
         }
     }
 
     /**
-     * Returns an Optional containing the base URL for the current environment, or Optional.empty() if not available.
+     * Optional accessor for the environment URL.
      *
-     * @return Optional of environment URL
+     * @return Optional containing the URL if present and retrievable; otherwise Optional.empty()
      */
-    public static Optional<String> getOptionalUrl() {
+    public static Optional<String> getUrlOptional() {
+        if (Objects.isNull(config)) {
+            return Optional.empty();
+        }
         try {
-            if (Objects.isNull(config)) {
-                return Optional.empty();
-            }
-            return Optional.ofNullable(config.getUrl());
+            return Optional.ofNullable(config.getUrl()).filter(s -> !s.trim().isEmpty());
         } catch (Exception e) {
-            LOGGER.log(Level.SEVERE, "Error retrieving optional URL from config", e);
+            LOGGER.log(Level.WARNING, "Failed to retrieve URL from configuration (optional getter)", e);
             return Optional.empty();
         }
     }
 
     /**
-     * Returns the API base URL for the current environment.
+     * Returns the API URL for the current environment.
      *
      * @return the API URL
      * @throws IllegalStateException if configuration was not initialized
-     * @throws RuntimeException      if retrieving the API URL from the config fails
+     * @throws RuntimeException      if retrieving the API URL from the config fails or value is null
      */
     public static String getApiUrl() {
         ensureConfigAvailable("getApiUrl");
         try {
             final String value = config.getApiUrl();
-            LOGGER.log(Level.FINE, "Retrieved API URL from config");
+            if (Objects.isNull(value) || value.trim().isEmpty()) {
+                final String msg = "API URL is not set in configuration.";
+                LOGGER.log(Level.SEVERE, msg);
+                throw new RuntimeException(msg);
+            }
             return value;
+        } catch (RuntimeException e) {
+            throw e;
         } catch (Exception e) {
-            LOGGER.log(Level.SEVERE, "Error retrieving API URL from config", e);
-            throw new RuntimeException("Unable to get API URL from config", e);
+            LOGGER.log(Level.SEVERE, "Failed to retrieve API URL from configuration", e);
+            throw new RuntimeException("Failed to retrieve API URL from configuration", e);
         }
     }
 
     /**
-     * Returns an Optional containing the API base URL for the current environment, or Optional.empty() if not available.
+     * Optional accessor for the API URL.
      *
-     * @return Optional of API URL
+     * @return Optional containing the API URL if present and retrievable; otherwise Optional.empty()
      */
-    public static Optional<String> getOptionalApiUrl() {
+    public static Optional<String> getApiUrlOptional() {
+        if (Objects.isNull(config)) {
+            return Optional.empty();
+        }
         try {
-            if (Objects.isNull(config)) {
-                return Optional.empty();
-            }
-            return Optional.ofNullable(config.getApiUrl());
+            return Optional.ofNullable(config.getApiUrl()).filter(s -> !s.trim().isEmpty());
         } catch (Exception e) {
-            LOGGER.log(Level.SEVERE, "Error retrieving optional API URL from config", e);
+            LOGGER.log(Level.WARNING, "Failed to retrieve API URL from configuration (optional getter)", e);
             return Optional.empty();
         }
     }
@@ -179,33 +197,39 @@ public final class ConfigManager {
      *
      * @return the DB username
      * @throws IllegalStateException if configuration was not initialized
-     * @throws RuntimeException      if retrieving the DB username from the config fails
+     * @throws RuntimeException      if retrieving the DB username from the config fails or value is null
      */
     public static String getDbUser() {
         ensureConfigAvailable("getDbUser");
         try {
             final String value = config.getDbUser();
-            LOGGER.log(Level.FINE, "Retrieved DB user from config");
+            if (Objects.isNull(value) || value.trim().isEmpty()) {
+                final String msg = "DB user is not set in configuration.";
+                LOGGER.log(Level.SEVERE, msg);
+                throw new RuntimeException(msg);
+            }
             return value;
+        } catch (RuntimeException e) {
+            throw e;
         } catch (Exception e) {
-            LOGGER.log(Level.SEVERE, "Error retrieving DB user from config", e);
-            throw new RuntimeException("Unable to get DB user from config", e);
+            LOGGER.log(Level.SEVERE, "Failed to retrieve DB user from configuration", e);
+            throw new RuntimeException("Failed to retrieve DB user from configuration", e);
         }
     }
 
     /**
-     * Returns an Optional containing the database username for the current environment, or Optional.empty() if not available.
+     * Optional accessor for the DB user.
      *
-     * @return Optional of DB username
+     * @return Optional containing the DB user if present and retrievable; otherwise Optional.empty()
      */
-    public static Optional<String> getOptionalDbUser() {
+    public static Optional<String> getDbUserOptional() {
+        if (Objects.isNull(config)) {
+            return Optional.empty();
+        }
         try {
-            if (Objects.isNull(config)) {
-                return Optional.empty();
-            }
-            return Optional.ofNullable(config.getDbUser());
+            return Optional.ofNullable(config.getDbUser()).filter(s -> !s.trim().isEmpty());
         } catch (Exception e) {
-            LOGGER.log(Level.SEVERE, "Error retrieving optional DB user from config", e);
+            LOGGER.log(Level.WARNING, "Failed to retrieve DB user from configuration (optional getter)", e);
             return Optional.empty();
         }
     }
@@ -215,60 +239,64 @@ public final class ConfigManager {
      *
      * @return the DB password
      * @throws IllegalStateException if configuration was not initialized
-     * @throws RuntimeException      if retrieving the DB password from the config fails
+     * @throws RuntimeException      if retrieving the DB password from the config fails or value is null
      */
     public static String getDbPassword() {
         ensureConfigAvailable("getDbPassword");
         try {
             final String value = config.getDbPassword();
-            LOGGER.log(Level.FINE, "Retrieved DB password from config");
+            if (Objects.isNull(value) || value.trim().isEmpty()) {
+                final String msg = "DB password is not set in configuration.";
+                LOGGER.log(Level.SEVERE, msg);
+                throw new RuntimeException(msg);
+            }
             return value;
+        } catch (RuntimeException e) {
+            throw e;
         } catch (Exception e) {
-            LOGGER.log(Level.SEVERE, "Error retrieving DB password from config", e);
-            throw new RuntimeException("Unable to get DB password from config", e);
+            LOGGER.log(Level.SEVERE, "Failed to retrieve DB password from configuration", e);
+            throw new RuntimeException("Failed to retrieve DB password from configuration", e);
         }
     }
 
     /**
-     * Returns an Optional containing the database password for the current environment, or Optional.empty() if not available.
+     * Optional accessor for the DB password.
      *
-     * @return Optional of DB password
+     * @return Optional containing the DB password if present and retrievable; otherwise Optional.empty()
      */
-    public static Optional<String> getOptionalDbPassword() {
+    public static Optional<String> getDbPasswordOptional() {
+        if (Objects.isNull(config)) {
+            return Optional.empty();
+        }
         try {
-            if (Objects.isNull(config)) {
-                return Optional.empty();
-            }
-            return Optional.ofNullable(config.getDbPassword());
+            return Optional.ofNullable(config.getDbPassword()).filter(s -> !s.trim().isEmpty());
         } catch (Exception e) {
-            LOGGER.log(Level.SEVERE, "Error retrieving optional DB password from config", e);
+            LOGGER.log(Level.WARNING, "Failed to retrieve DB password from configuration (optional getter)", e);
             return Optional.empty();
         }
     }
 
     /**
-     * Returns the configured browser name. If not set, returns the default browser.
+     * Returns the browser name currently set for the runtime.
      *
      * @return browser name (never null)
      */
     public static String getBrowser() {
-        try {
-            final String result = (Objects.isNull(browser) || browser.trim().isEmpty()) ? DEFAULT_BROWSER : browser;
-            LOGGER.log(Level.FINE, "Retrieved browser: {0}", result);
-            return result;
-        } catch (Exception e) {
-            LOGGER.log(Level.SEVERE, "Error retrieving browser", e);
-            // Fall back to default to keep behavior safe
-            return DEFAULT_BROWSER;
-        }
+        // browser field always has a sensible default; ensure a non-null return
+        final String current = browser;
+        return (Objects.isNull(current) || current.trim().isEmpty()) ? DEFAULT_BROWSER : current;
     }
 
     /**
-     * Returns an Optional containing the current EnvironmentConfig instance, or Optional.empty() if not initialized.
+     * Optional accessor for the browser name.
      *
-     * @return Optional of EnvironmentConfig
+     * @return Optional containing the browser name if present; otherwise Optional.of(DEFAULT_BROWSER)
      */
-    public static Optional<EnvironmentConfig> getOptionalConfig() {
-        return Optional.ofNullable(config);
+    public static Optional<String> getBrowserOptional() {
+        final String current = browser;
+        if (Objects.isNull(current) || current.trim().isEmpty()) {
+            return Optional.of(DEFAULT_BROWSER);
+        }
+        return Optional.of(current);
     }
 }

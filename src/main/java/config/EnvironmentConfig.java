@@ -62,29 +62,30 @@ public final class EnvironmentConfig {
             reader = new PropertyReader(fileName);
 
             // If PropertyReader implements AutoCloseable we use try-with-resources to ensure it is closed.
-            // If not, the resource will be null and nothing will be closed here; the finally block will attempt a reflective close.
-            try (AutoCloseable ignored = reader instanceof AutoCloseable ? (AutoCloseable) reader : null) {
-                tmpUrl = safeTrim(reader.getProperty(PROP_APP_URL));
-                tmpApiUrl = safeTrim(reader.getProperty(PROP_API_URL));
-                tmpDbUrl = safeTrim(reader.getProperty(PROP_DB_URL));
-                tmpDbUser = safeTrim(reader.getProperty(PROP_DB_USER));
-                tmpDbPassword = safeTrim(reader.getProperty(PROP_DB_PASSWORD));
+            if (reader instanceof AutoCloseable) {
+                try (AutoCloseable ac = (AutoCloseable) reader) {
+                    tmpUrl = safeTrim(reader.getProperty(PROP_APP_URL));
+                    tmpApiUrl = safeTrim(reader.getProperty(PROP_API_URL));
+                    tmpDbUrl = safeTrim(reader.getProperty(PROP_DB_URL));
+                    tmpDbUser = safeTrim(reader.getProperty(PROP_DB_USER));
+                    tmpDbPassword = safeTrim(reader.getProperty(PROP_DB_PASSWORD));
 
-                // Log missing important properties at WARN level to help diagnostics
-                if (Objects.isNull(tmpUrl)) {
-                    LOGGER.warn("Property '{}' is missing in {}", PROP_APP_URL, fileName);
+                    logLoadedProperties(fileName, tmpUrl, tmpApiUrl, tmpDbUrl, tmpDbUser);
                 }
-                if (Objects.isNull(tmpApiUrl)) {
-                    LOGGER.warn("Property '{}' is missing in {}", PROP_API_URL, fileName);
-                }
+            } else {
+                // Reader is not AutoCloseable: use normal try/finally and attempt reflective close in finally.
+                try {
+                    tmpUrl = safeTrim(reader.getProperty(PROP_APP_URL));
+                    tmpApiUrl = safeTrim(reader.getProperty(PROP_API_URL));
+                    tmpDbUrl = safeTrim(reader.getProperty(PROP_DB_URL));
+                    tmpDbUser = safeTrim(reader.getProperty(PROP_DB_USER));
+                    tmpDbPassword = safeTrim(reader.getProperty(PROP_DB_PASSWORD));
 
-                LOGGER.debug("Loaded properties from {}: app.url={}, api.url={}, db.url={}, db.user={}",
-                        fileName,
-                        tmpUrl,
-                        tmpApiUrl,
-                        tmpDbUrl,
-                        Objects.isNull(tmpDbUser) ? "<null>" : maskValue(tmpDbUser));
-            } // try-with-resources will close reader if it is AutoCloseable
+                    logLoadedProperties(fileName, tmpUrl, tmpApiUrl, tmpDbUrl, tmpDbUser);
+                } finally {
+                    // Attempt reflective close below in outer finally as well; keep this for safety.
+                }
+            }
         } catch (RuntimeException re) {
             LOGGER.error("Runtime exception while loading properties from {}", fileName, re);
             throw re;
@@ -116,92 +117,102 @@ public final class EnvironmentConfig {
     }
 
     /**
-     * Get the application URL.
+     * Safely trims input string. Returns null if input is null or trims to empty.
      *
-     * @return Optional containing the URL if present, otherwise an empty Optional
+     * @param input the raw property value
+     * @return trimmed value or null if empty
      */
-    public Optional<String> getUrl() {
-        return Optional.ofNullable(url);
-    }
-
-    /**
-     * Get the API URL.
-     *
-     * @return Optional containing the API URL if present, otherwise an empty Optional
-     */
-    public Optional<String> getApiUrl() {
-        return Optional.ofNullable(apiUrl);
-    }
-
-    /**
-     * Get the database URL.
-     *
-     * @return Optional containing the database URL if present, otherwise an empty Optional
-     */
-    public Optional<String> getDbUrl() {
-        return Optional.ofNullable(dbUrl);
-    }
-
-    /**
-     * Get the database user.
-     *
-     * @return Optional containing the database user if present, otherwise an empty Optional
-     */
-    public Optional<String> getDbUser() {
-        return Optional.ofNullable(dbUser);
-    }
-
-    /**
-     * Get the database password.
-     *
-     * <p>Note: callers should handle this value carefully and avoid logging it. This method
-     * returns the raw password as read from the properties file.</p>
-     *
-     * @return Optional containing the database password if present, otherwise an empty Optional
-     */
-    public Optional<String> getDbPassword() {
-        return Optional.ofNullable(dbPassword);
-    }
-
-    /**
-     * Utility to trim a string and convert empty strings to null.
-     *
-     * @param value input value
-     * @return trimmed string or null if input was null or trimmed to empty
-     */
-    private static String safeTrim(String value) {
-        if (Objects.isNull(value)) {
+    private static String safeTrim(String input) {
+        if (Objects.isNull(input)) {
             return null;
         }
-        String trimmed = value.trim();
-        return trimmed.isEmpty() ? null : trimmed;
+        String t = input.trim();
+        return t.isEmpty() ? null : t;
     }
 
     /**
-     * Mask a sensitive value by keeping the first and last character if length permits.
+     * Masks a sensitive value for safe logging. For short values it returns "***".
      *
-     * @param value sensitive value
-     * @return masked representation suitable for logging
+     * @param value the sensitive value
+     * @return masked string for logging
      */
     private static String maskValue(String value) {
         if (Objects.isNull(value)) {
             return "<null>";
         }
-        int len = value.length();
-        if (len <= 2) {
-            return "**";
+        if (value.length() <= 2) {
+            return "***";
         }
-        return value.charAt(0) + "****" + value.charAt(len - 1);
+        // show first and last character to help debugging without exposing secret
+        return value.charAt(0) + "***" + value.charAt(value.length() - 1);
     }
 
-    @Override
-    public String toString() {
-        return "EnvironmentConfig{" +
-                "url=" + (Objects.isNull(url) ? "<null>" : url) +
-                ", apiUrl=" + (Objects.isNull(apiUrl) ? "<null>" : apiUrl) +
-                ", dbUrl=" + (Objects.isNull(dbUrl) ? "<null>" : dbUrl) +
-                ", dbUser=" + (Objects.isNull(dbUser) ? "<null>" : maskValue(dbUser)) +
-                ", dbPassword=" + (Objects.isNull(dbPassword) ? "<null>" : "<masked>") +
-                '}';
+    /**
+     * Log loaded properties while avoiding printing sensitive data.
+     *
+     * @param fileName properties file name
+     * @param appUrl loaded app url
+     * @param apiUrl loaded api url
+     * @param dbUrl loaded db url
+     * @param dbUser loaded db user
+     */
+    private void logLoadedProperties(String fileName, String appUrl, String apiUrl, String dbUrl, String dbUser) {
+        if (Objects.isNull(appUrl)) {
+            LOGGER.warn("Property '{}' is missing in {}", PROP_APP_URL, fileName);
+        }
+        if (Objects.isNull(apiUrl)) {
+            LOGGER.warn("Property '{}' is missing in {}", PROP_API_URL, fileName);
+        }
+        LOGGER.debug("Loaded properties from {}: app.url={}, api.url={}, db.url={}, db.user={}",
+                fileName,
+                appUrl,
+                apiUrl,
+                dbUrl,
+                Objects.isNull(dbUser) ? "<null>" : maskValue(dbUser));
+    }
+
+    /**
+     * Returns the application URL if present.
+     *
+     * @return Optional containing app url or empty if not present
+     */
+    public Optional<String> getUrl() {
+        return Optional.ofNullable(this.url);
+    }
+
+    /**
+     * Returns the API URL if present.
+     *
+     * @return Optional containing api url or empty if not present
+     */
+    public Optional<String> getApiUrl() {
+        return Optional.ofNullable(this.apiUrl);
+    }
+
+    /**
+     * Returns the database URL if present.
+     *
+     * @return Optional containing db url or empty if not present
+     */
+    public Optional<String> getDbUrl() {
+        return Optional.ofNullable(this.dbUrl);
+    }
+
+    /**
+     * Returns the database user if present.
+     *
+     * @return Optional containing db user or empty if not present
+     */
+    public Optional<String> getDbUser() {
+        return Optional.ofNullable(this.dbUser);
+    }
+
+    /**
+     * Returns the database password if present. Callers should handle this sensitively.
+     *
+     * @return Optional containing db password or empty if not present
+     */
+    public Optional<String> getDbPassword() {
+        return Optional.ofNullable(this.dbPassword);
     }
 }

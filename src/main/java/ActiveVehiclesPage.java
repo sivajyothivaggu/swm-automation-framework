@@ -15,9 +15,12 @@ import java.util.Optional;
  * The helpers use null-safe idioms (Objects.isNull, Optional) and include logging
  * and error handling suitable for production usage.
  * </p>
+ *
+ * @author SWM
+ * @since 1.0
  */
 public final class ActiveVehiclesPage extends BaseVehiclePage {
-    private static final Logger logger = LoggerFactory.getLogger(ActiveVehiclesPage.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(ActiveVehiclesPage.class);
 
     /**
      * Constructs a new ActiveVehiclesPage instance.
@@ -25,7 +28,7 @@ public final class ActiveVehiclesPage extends BaseVehiclePage {
      */
     public ActiveVehiclesPage() {
         super();
-        logger.debug("ActiveVehiclesPage initialized");
+        LOGGER.debug("ActiveVehiclesPage initialized");
     }
 
     /**
@@ -43,22 +46,18 @@ public final class ActiveVehiclesPage extends BaseVehiclePage {
     public Optional<String> safeVehicleId(final String vehicleId) {
         try {
             if (Objects.isNull(vehicleId)) {
-                logger.debug("safeVehicleId called with null vehicleId");
+                LOGGER.debug("safeVehicleId called with null vehicleId");
                 return Optional.empty();
             }
             final String trimmed = vehicleId.trim();
             if (trimmed.isEmpty()) {
-                logger.debug("safeVehicleId called with empty vehicleId after trimming");
+                LOGGER.debug("safeVehicleId called with empty vehicleId after trimming");
                 return Optional.empty();
             }
             return Optional.of(trimmed);
-        } catch (RuntimeException re) {
-            // Defensive: log unexpected runtime exceptions and return empty to preserve callers' stability
-            logger.error("Runtime error validating vehicleId", re);
-            return Optional.empty();
         } catch (Exception e) {
             // Defensive: log unexpected exceptions and return empty to preserve callers' stability
-            logger.error("Unexpected error validating vehicleId", e);
+            LOGGER.error("Unexpected error validating vehicleId: {}", e.getMessage(), e);
             return Optional.empty();
         }
     }
@@ -76,14 +75,11 @@ public final class ActiveVehiclesPage extends BaseVehiclePage {
      */
     public boolean isPageReady() {
         try {
-            logger.trace("Checking ActiveVehiclesPage readiness");
+            LOGGER.trace("Checking ActiveVehiclesPage readiness");
             // Placeholder: real checks would be implemented here.
             return true;
-        } catch (RuntimeException re) {
-            logger.error("Runtime error while checking page readiness", re);
-            return false;
         } catch (Exception e) {
-            logger.error("Error while checking page readiness", e);
+            LOGGER.error("Error while checking page readiness: {}", e.getMessage(), e);
             return false;
         }
     }

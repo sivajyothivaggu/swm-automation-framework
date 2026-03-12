@@ -1,6 +1,7 @@
 package com.swm.ui.pages.transport.VehicleManagement;
 
 import com.swm.core.base.BasePage;
+import org.openqa.selenium.ElementClickInterceptedException;
 import org.openqa.selenium.ElementNotInteractableException;
 import org.openqa.selenium.NoSuchElementException;
 import org.openqa.selenium.StaleElementReferenceException;
@@ -114,7 +115,7 @@ public class BaseVehiclePage extends BasePage {
     }
 
     /**
-     * Clicks the export button to trigger export functionality.
+     * Clicks the export button to trigger vehicle export.
      *
      * @throws IllegalStateException if the export button element is not initialized
      * @throws RuntimeException      if a WebElement interaction error occurs
@@ -130,7 +131,6 @@ public class BaseVehiclePage extends BasePage {
             logger.error("Invalid state while clicking export button: {}", e.getMessage(), e);
             throw e;
         } catch (RuntimeException e) {
-            // Already logged in safeClick; rethrow
             throw e;
         } catch (Exception e) {
             logger.error("Unexpected error while clicking export button: {}", e.getMessage(), e);
@@ -139,68 +139,62 @@ public class BaseVehiclePage extends BasePage {
     }
 
     /**
+     * Safe click helper that performs validations and robust exception handling.
+     *
+     * @param element the WebElement to click
+     * @param name    a human-readable name for logging
+     * @throws IllegalArgumentException if {@code element} is null
+     * @throws RuntimeException         if clicking fails due to Selenium related issues
+     */
+    protected void safeClick(WebElement element, String name) {
+        logger.debug("Attempting safe click on element: {}", name);
+        if (Objects.isNull(element)) {
+            logger.error("Attempted to safeClick a null element: {}", name);
+            throw new IllegalArgumentException("WebElement to click must not be null: " + name);
+        }
+
+        try {
+            if (!element.isDisplayed() || !element.isEnabled()) {
+                String msg = String.format("%s is not interactable (displayed=%s, enabled=%s)",
+                        name, element.isDisplayed(), element.isEnabled());
+                logger.error(msg);
+                throw new ElementNotInteractableException(msg);
+            }
+            element.click();
+        } catch (ElementClickInterceptedException | ElementNotInteractableException |
+                 NoSuchElementException | StaleElementReferenceException e) {
+            logger.error("Failed to click {}: {}", name, e.getMessage(), e);
+            throw new RuntimeException("Failed to click " + name, e);
+        } catch (Exception e) {
+            logger.error("Unexpected error while clicking {}: {}", name, e.getMessage(), e);
+            throw new RuntimeException("Unexpected error while clicking " + name, e);
+        }
+    }
+
+    /**
      * Returns an Optional wrapping the search box WebElement.
      *
-     * @return Optional containing the search box if present; otherwise Optional.empty()
+     * @return Optional of the search box element, empty if not initialized
      */
-    protected Optional<WebElement> getSearchBox() {
-        return Optional.ofNullable(searchBox);
+    public Optional<WebElement> getSearchBox() {
+        return Optional.ofNullable(this.searchBox);
     }
 
     /**
      * Returns an Optional wrapping the filter button WebElement.
      *
-     * @return Optional containing the filter button if present; otherwise Optional.empty()
+     * @return Optional of the filter button element, empty if not initialized
      */
-    protected Optional<WebElement> getFilterButton() {
-        return Optional.ofNullable(filterButton);
+    public Optional<WebElement> getFilterButton() {
+        return Optional.ofNullable(this.filterButton);
     }
 
     /**
      * Returns an Optional wrapping the export button WebElement.
      *
-     * @return Optional containing the export button if present; otherwise Optional.empty()
+     * @return Optional of the export button element, empty if not initialized
      */
-    protected Optional<WebElement> getExportButton() {
-        return Optional.ofNullable(exportButton);
-    }
-
-    /**
-     * Attempts to click the provided element with validation and detailed logging.
-     * This method validates that the element reference is not null and is interactable
-     * before invoking click(). Exceptions are caught, logged, and rethrown as
-     * RuntimeException to preserve existing behavior while providing diagnostics.
-     *
-     * @param element     the WebElement to click; must not be null
-     * @param elementName descriptive name used in log messages
-     * @throws IllegalStateException if {@code element} is null
-     * @throws RuntimeException      if clicking fails due to WebElement interaction issues
-     */
-    private void safeClick(WebElement element, String elementName) {
-        logger.debug("safeClick invoked for element: {}", elementName);
-        try {
-            if (Objects.isNull(element)) {
-                throw new IllegalStateException(elementName + " element reference is null");
-            }
-
-            if (!element.isDisplayed() || !element.isEnabled()) {
-                String msg = String.format("%s is not displayed or not enabled", elementName);
-                logger.warn(msg);
-                throw new ElementNotInteractableException(msg);
-            }
-
-            try {
-                element.click();
-            } catch (NoSuchElementException | StaleElementReferenceException | ElementNotInteractableException e) {
-                logger.error("WebElement interaction failed while clicking {}: {}", elementName, e.getMessage(), e);
-                throw new RuntimeException("Failed to click " + elementName, e);
-            } catch (Exception e) {
-                logger.error("Unexpected exception while clicking {}: {}", elementName, e.getMessage(), e);
-                throw new RuntimeException("Unexpected error while clicking " + elementName, e);
-            }
-        } catch (IllegalStateException e) {
-            logger.error("Illegal state in safeClick for {}: {}", elementName, e.getMessage(), e);
-            throw e;
-        }
+    public Optional<WebElement> getExportButton() {
+        return Optional.ofNullable(this.exportButton);
     }
 }

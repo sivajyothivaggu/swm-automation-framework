@@ -141,7 +141,7 @@ public final class AuthPayload {
     }
 
     /**
-     * Standard equals implementation.
+     * Standard equals implementation comparing username and password.
      *
      * @param o other object
      * @return true if same username and password
@@ -155,7 +155,7 @@ public final class AuthPayload {
             return false;
         }
         AuthPayload that = (AuthPayload) o;
-        return Objects.equals(username, that.username) && Objects.equals(password, that.password);
+        return Objects.equals(this.username, that.username) && Objects.equals(this.password, that.password);
     }
 
     /**
@@ -169,15 +169,12 @@ public final class AuthPayload {
     }
 
     /**
-     * Returns a string representation with sensitive fields masked.
+     * String representation that avoids exposing sensitive information.
      *
-     * @return string representation
+     * @return string describing this payload with masked sensitive values
      */
     @Override
     public String toString() {
-        return "AuthPayload{" +
-                "username='" + maskForLogs(username) + '\'' +
-                ", password='" + maskForLogs(password) + '\'' +
-                '}';
+        return "AuthPayload{username=" + maskForLogs(username) + ", password=" + maskForLogs(password) + "}";
     }
 }
