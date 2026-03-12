@@ -14,7 +14,7 @@ import java.util.logging.Logger;
  *
  * Notes:
  * - Initialization problems are logged. Accessing configuration before successful initialization
- *   will result in a clear IllegalStateException.
+ *   will result in a clear IllegalStateException from the "requireInitialized" helper.
  * - Optional-based accessors are provided for callers that prefer to handle absence explicitly.
  *
  * This class is thread-safe for reads and supports explicit re-initialization via reload().
@@ -48,180 +48,247 @@ public final class ConfigManager {
             final String envName = System.getProperty("env", "qa");
             final String browserName = System.getProperty("browser", "chrome");
             final EnvironmentConfig localConfig = new EnvironmentConfig(envName);
-            config = localConfig;
-            browser = browserName;
-            LOGGER.log(Level.CONFIG, "ConfigManager initialized for environment: {0}, browser: {1}",
-                    new Object[]{envName, browserName});
-        } catch (Exception e) {
+
+            // Validate created config and assign to volatile fields.
+            if (Objects.isNull(localConfig)) {
+                LOGGER.log(Level.SEVERE, "EnvironmentConfig construction returned null for env: {0}", envName);
+                config = null;
+                browser = browserName;
+            } else {
+                config = localConfig;
+                browser = browserName;
+                LOGGER.log(Level.INFO, "Configuration initialized for env: {0}, browser: {1}", new Object[]{envName, browserName});
+            }
+        } catch (Exception ex) {
+            // Catch all to ensure static init does not throw; fail-fast for callers accessing config.
+            LOGGER.log(Level.SEVERE, "Failed to initialize configuration from system properties", ex);
             config = null;
-            browser = null;
-            LOGGER.log(Level.SEVERE, "Failed to initialize EnvironmentConfig from system properties", e);
+            browser = System.getProperty("browser", "chrome");
         }
     }
 
     /**
-     * Re-initialize the configuration for a given environment and browser.
+     * Reload configuration using current system properties. This is synchronized to avoid concurrent
+     * re-initializations interfering with each other.
+     */
+    public static synchronized void reload() {
+        try {
+            final String envName = System.getProperty("env", "qa");
+            final String browserName = System.getProperty("browser", "chrome");
+            final EnvironmentConfig localConfig = new EnvironmentConfig(envName);
+
+            if (Objects.isNull(localConfig)) {
+                LOGGER.log(Level.WARNING, "Reload produced null EnvironmentConfig for env: {0}. Keeping previous config.", envName);
+                // keep previous config but update browser preference
+                browser = browserName;
+            } else {
+                config = localConfig;
+                browser = browserName;
+                LOGGER.log(Level.INFO, "Configuration reloaded for env: {0}, browser: {1}", new Object[]{envName, browserName});
+            }
+        } catch (Exception ex) {
+            LOGGER.log(Level.SEVERE, "Failed to reload configuration from system properties", ex);
+            // Intentionally do not change existing config on reload failure to avoid leaving it null.
+            browser = System.getProperty("browser", browser);
+        }
+    }
+
+    /**
+     * Reload configuration explicitly for a given environment and browser.
      *
-     * @param envName     environment name to load (non-null)
-     * @param browserName browser name to set (nullable)
-     * @throws IllegalArgumentException if envName is null or blank
-     * @throws RuntimeException         if initialization of EnvironmentConfig fails
+     * @param envName     The environment identifier (non-null).
+     * @param browserName The browser name (non-null).
      */
     public static synchronized void reload(final String envName, final String browserName) {
-        if (envName == null || envName.trim().isEmpty()) {
-            throw new IllegalArgumentException("envName must not be null or empty");
-        }
+        Objects.requireNonNull(envName, "envName must not be null");
+        Objects.requireNonNull(browserName, "browserName must not be null");
         try {
-            final EnvironmentConfig newConfig = new EnvironmentConfig(envName);
-            config = newConfig;
-            browser = (browserName == null || browserName.trim().isEmpty()) ? "chrome" : browserName;
-            LOGGER.log(Level.INFO, "ConfigManager reloaded for environment: {0}, browser: {1}",
-                    new Object[]{envName, browser});
-        } catch (Exception e) {
-            LOGGER.log(Level.SEVERE, "Failed to reload EnvironmentConfig for environment: " + envName, e);
-            throw new RuntimeException("Failed to reload configuration for environment: " + envName, e);
+            final EnvironmentConfig localConfig = new EnvironmentConfig(envName);
+            if (Objects.isNull(localConfig)) {
+                LOGGER.log(Level.WARNING, "Explicit reload produced null EnvironmentConfig for env: {0}. Keeping previous config.", envName);
+                browser = browserName;
+            } else {
+                config = localConfig;
+                browser = browserName;
+                LOGGER.log(Level.INFO, "Configuration explicitly reloaded for env: {0}, browser: {1}", new Object[]{envName, browserName});
+            }
+        } catch (Exception ex) {
+            LOGGER.log(Level.SEVERE, "Failed to explicitly reload configuration for env: " + envName + ", browser: " + browserName, ex);
+            // Do not overwrite existing config on failure
         }
     }
 
     /**
-     * Returns the base URL for the current environment.
+     * Returns true if a valid EnvironmentConfig is available.
      *
-     * @return the environment URL
-     * @throws IllegalStateException if configuration was not initialized
-     * @throws RuntimeException      if retrieving the URL from the config fails
+     * @return boolean indicating initialization state
+     */
+    public static boolean isInitialized() {
+        return Objects.nonNull(config);
+    }
+
+    /**
+     * Ensure that configuration has been initialized. If not, throws IllegalStateException with a helpful message.
+     *
+     * @return the initialized EnvironmentConfig
+     * @throws IllegalStateException if config is not initialized
+     */
+    private static EnvironmentConfig requireInitialized() {
+        if (Objects.isNull(config)) {
+            final String msg = "Configuration has not been initialized. Ensure system property 'env' is set and initialization succeeded.";
+            LOGGER.log(Level.SEVERE, msg);
+            throw new IllegalStateException(msg);
+        }
+        return config;
+    }
+
+    /**
+     * Returns an Optional containing the base URL if present.
+     *
+     * @return Optional<String> base URL
+     */
+    public static Optional<String> getUrlOptional() {
+        try {
+            if (Objects.isNull(config)) {
+                return Optional.empty();
+            }
+            return Optional.ofNullable(config.getUrl());
+        } catch (Exception ex) {
+            LOGGER.log(Level.SEVERE, "Error retrieving URL from configuration", ex);
+            return Optional.empty();
+        }
+    }
+
+    /**
+     * Returns the base URL, or throws IllegalStateException if configuration is not initialized or URL absent.
+     *
+     * @return String base URL
      */
     public static String getUrl() {
-        ensureConfigAvailable("getUrl");
+        final EnvironmentConfig cfg = requireInitialized();
+        final String url = cfg.getUrl();
+        if (Objects.isNull(url)) {
+            final String msg = "Configured environment does not provide a URL.";
+            LOGGER.log(Level.SEVERE, msg);
+            throw new IllegalStateException(msg);
+        }
+        return url;
+    }
+
+    /**
+     * Returns an Optional containing the API URL if present.
+     *
+     * @return Optional<String> API URL
+     */
+    public static Optional<String> getApiUrlOptional() {
         try {
-            final String value = config.getUrl();
-            LOGGER.log(Level.FINE, "Retrieved URL from config");
-            return value;
-        } catch (Exception e) {
-            LOGGER.log(Level.SEVERE, "Error retrieving URL from config", e);
-            throw new RuntimeException("Unable to get URL from config", e);
+            if (Objects.isNull(config)) {
+                return Optional.empty();
+            }
+            return Optional.ofNullable(config.getApiUrl());
+        } catch (Exception ex) {
+            LOGGER.log(Level.SEVERE, "Error retrieving API URL from configuration", ex);
+            return Optional.empty();
         }
     }
 
     /**
-     * Returns the API base URL for the current environment.
+     * Returns the API URL, or throws IllegalStateException if configuration is not initialized or API URL absent.
      *
-     * @return the API URL
-     * @throws IllegalStateException if configuration was not initialized
-     * @throws RuntimeException      if retrieving the API URL from the config fails
+     * @return String API URL
      */
     public static String getApiUrl() {
-        ensureConfigAvailable("getApiUrl");
-        try {
-            final String value = config.getApiUrl();
-            LOGGER.log(Level.FINE, "Retrieved API URL from config");
-            return value;
-        } catch (Exception e) {
-            LOGGER.log(Level.SEVERE, "Error retrieving API URL from config", e);
-            throw new RuntimeException("Unable to get API URL from config", e);
+        final EnvironmentConfig cfg = requireInitialized();
+        final String apiUrl = cfg.getApiUrl();
+        if (Objects.isNull(apiUrl)) {
+            final String msg = "Configured environment does not provide an API URL.";
+            LOGGER.log(Level.SEVERE, msg);
+            throw new IllegalStateException(msg);
         }
+        return apiUrl;
     }
 
     /**
-     * Returns the database connection URL for the current environment.
+     * Returns an Optional containing the DB username if present.
      *
-     * @return the DB URL
-     * @throws IllegalStateException if configuration was not initialized
-     * @throws RuntimeException      if retrieving the DB URL from the config fails
+     * @return Optional<String> DB username
      */
-    public static String getDbUrl() {
-        ensureConfigAvailable("getDbUrl");
+    public static Optional<String> getDbUserOptional() {
         try {
-            final String value = config.getDbUrl();
-            LOGGER.log(Level.FINE, "Retrieved DB URL from config");
-            return value;
-        } catch (Exception e) {
-            LOGGER.log(Level.SEVERE, "Error retrieving DB URL from config", e);
-            throw new RuntimeException("Unable to get DB URL from config", e);
+            if (Objects.isNull(config)) {
+                return Optional.empty();
+            }
+            return Optional.ofNullable(config.getDbUser());
+        } catch (Exception ex) {
+            LOGGER.log(Level.SEVERE, "Error retrieving DB user from configuration", ex);
+            return Optional.empty();
         }
     }
 
     /**
-     * Returns the database username for the current environment.
+     * Returns the DB username, or throws IllegalStateException if configuration is not initialized or username absent.
      *
-     * @return the DB user
-     * @throws IllegalStateException if configuration was not initialized
-     * @throws RuntimeException      if retrieving the DB user from the config fails
+     * @return String DB username
      */
     public static String getDbUser() {
-        ensureConfigAvailable("getDbUser");
+        final EnvironmentConfig cfg = requireInitialized();
+        final String dbUser = cfg.getDbUser();
+        if (Objects.isNull(dbUser)) {
+            final String msg = "Configured environment does not provide a DB user.";
+            LOGGER.log(Level.SEVERE, msg);
+            throw new IllegalStateException(msg);
+        }
+        return dbUser;
+    }
+
+    /**
+     * Returns an Optional containing the DB password if present.
+     *
+     * @return Optional<String> DB password
+     */
+    public static Optional<String> getDbPasswordOptional() {
         try {
-            final String value = config.getDbUser();
-            LOGGER.log(Level.FINE, "Retrieved DB user from config");
-            return value;
-        } catch (Exception e) {
-            LOGGER.log(Level.SEVERE, "Error retrieving DB user from config", e);
-            throw new RuntimeException("Unable to get DB user from config", e);
+            if (Objects.isNull(config)) {
+                return Optional.empty();
+            }
+            return Optional.ofNullable(config.getDbPassword());
+        } catch (Exception ex) {
+            LOGGER.log(Level.SEVERE, "Error retrieving DB password from configuration", ex);
+            return Optional.empty();
         }
     }
 
     /**
-     * Returns the database password for the current environment.
+     * Returns the DB password, or throws IllegalStateException if configuration is not initialized or password absent.
      *
-     * Note: Password values are sensitive. This method avoids logging the returned value.
-     *
-     * @return the DB password
-     * @throws IllegalStateException if configuration was not initialized
-     * @throws RuntimeException      if retrieving the DB password from the config fails
+     * @return String DB password
      */
     public static String getDbPassword() {
-        ensureConfigAvailable("getDbPassword");
-        try {
-            final String value = config.getDbPassword();
-            LOGGER.log(Level.FINE, "Retrieved DB password from config (value suppressed)");
-            return value;
-        } catch (Exception e) {
-            LOGGER.log(Level.SEVERE, "Error retrieving DB password from config", e);
-            throw new RuntimeException("Unable to get DB password from config", e);
+        final EnvironmentConfig cfg = requireInitialized();
+        final String dbPassword = cfg.getDbPassword();
+        if (Objects.isNull(dbPassword)) {
+            final String msg = "Configured environment does not provide a DB password.";
+            LOGGER.log(Level.SEVERE, msg);
+            throw new IllegalStateException(msg);
         }
+        return dbPassword;
     }
 
     /**
-     * Returns the browser name currently configured.
+     * Returns an Optional with the configured browser name.
      *
-     * @return the browser name
-     * @throws IllegalStateException if configuration was not initialized
-     */
-    public static String getBrowser() {
-        if (Objects.isNull(browser)) {
-            throw new IllegalStateException("Browser not configured. ConfigManager may not have been initialized.");
-        }
-        return browser;
-    }
-
-    /**
-     * Returns an Optional containing the EnvironmentConfig if available.
-     *
-     * @return Optional of EnvironmentConfig
-     */
-    public static Optional<EnvironmentConfig> getConfigOptional() {
-        return Optional.ofNullable(config);
-    }
-
-    /**
-     * Returns an Optional containing the browser name if available.
-     *
-     * @return Optional of browser name
+     * @return Optional<String> browser name
      */
     public static Optional<String> getBrowserOptional() {
         return Optional.ofNullable(browser);
     }
 
     /**
-     * Ensures that the configuration has been successfully initialized.
+     * Returns the configured browser. If not set, returns the default "chrome".
      *
-     * @param caller name of the calling method for better error messages
-     * @throws IllegalStateException if the configuration is not available
+     * @return String browser name
      */
-    private static void ensureConfigAvailable(final String caller) {
-        if (Objects.isNull(config)) {
-            final String msg = "Configuration not initialized. Cannot execute: " + caller;
-            LOGGER.log(Level.SEVERE, msg);
-            throw new IllegalStateException(msg);
-        }
+    public static String getBrowser() {
+        return Objects.nonNull(browser) ? browser : "chrome";
     }
 }
