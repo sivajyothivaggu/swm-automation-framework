@@ -52,11 +52,11 @@ public class DBConnection extends BaseDB {
                 connect();
             }
 
-            try (Statement stmt = connection.createStatement();
-                 ResultSet rs = stmt.executeQuery(query)) {
+            try (Statement statement = connection.createStatement();
+                 ResultSet resultSet = statement.executeQuery(query)) {
 
                 CachedRowSet cachedRowSet = RowSetProvider.newFactory().createCachedRowSet();
-                cachedRowSet.populate(rs);
+                cachedRowSet.populate(resultSet);
                 logger.debug("Query executed and results populated into CachedRowSet.");
                 return cachedRowSet;
             }
@@ -96,8 +96,8 @@ public class DBConnection extends BaseDB {
                 connect();
             }
 
-            try (Statement stmt = connection.createStatement()) {
-                int result = stmt.executeUpdate(query);
+            try (Statement statement = connection.createStatement()) {
+                int result = statement.executeUpdate(query);
                 logger.debug("Update executed. Rows affected: {}", result);
                 return result;
             }
@@ -118,37 +118,38 @@ public class DBConnection extends BaseDB {
     }
 
     /**
-     * Converts a ResultSet into a List of Maps where each map represents a single row.
-     * The ResultSet is copied into a CachedRowSet first to ensure callers do not need to
-     * keep the original JDBC connection open.
+     * Converts a ResultSet into a List of Maps where each map represents a row with
+     * column-label-to-value mapping. This method does not close the provided ResultSet;
+     * callers should close it if necessary. If null is provided, an empty list is returned.
      *
-     * @param resultSet the source ResultSet; must not be null
-     * @return a List of Maps representing rows; empty list if no rows
-     * @throws SQLException if a database access error occurs while reading the ResultSet
-     * @throws NullPointerException if resultSet is null
+     * @param resultSet the ResultSet to convert; may be null
+     * @return a List of Maps representing the rows; never null
+     * @throws SQLException if reading from the ResultSet fails
      */
     public List<Map<String, Object>> getResultList(ResultSet resultSet) throws SQLException {
-        Objects.requireNonNull(resultSet, "resultSet must not be null");
-        List<Map<String, Object>> rows = new ArrayList<>();
+        if (Objects.isNull(resultSet)) {
+            logger.debug("getResultList called with null ResultSet; returning empty list.");
+            return new ArrayList<>();
+        }
 
-        // Use a disconnected CachedRowSet to iterate safely
-        try (CachedRowSet cachedRowSet = RowSetProvider.newFactory().createCachedRowSet()) {
-            cachedRowSet.populate(resultSet);
-            ResultSetMetaData metaData = cachedRowSet.getMetaData();
+        List<Map<String, Object>> rows = new ArrayList<>();
+        try {
+            ResultSetMetaData metaData = resultSet.getMetaData();
             int columnCount = metaData.getColumnCount();
 
-            while (cachedRowSet.next()) {
+            while (resultSet.next()) {
                 Map<String, Object> row = new HashMap<>(columnCount);
-                for (int i = 1; i <= columnCount; i++) {
-                    String columnLabel = metaData.getColumnLabel(i);
+                for (int col = 1; col <= columnCount; col++) {
+                    String columnLabel = metaData.getColumnLabel(col);
                     if (columnLabel == null || columnLabel.isEmpty()) {
-                        columnLabel = metaData.getColumnName(i);
+                        columnLabel = metaData.getColumnName(col);
                     }
-                    row.put(columnLabel, cachedRowSet.getObject(i));
+                    Object value = resultSet.getObject(col);
+                    row.put(columnLabel, value);
                 }
                 rows.add(row);
             }
-            logger.debug("Converted ResultSet to list with {} rows.", rows.size());
+            logger.debug("Converted ResultSet to list of {} rows.", rows.size());
             return rows;
         } catch (SQLException sqle) {
             logger.error("SQLException while converting ResultSet to list: {}", sqle.getMessage(), sqle);

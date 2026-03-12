@@ -15,11 +15,17 @@ import org.slf4j.LoggerFactory;
  *
  * <p>Usage notes:
  * - Constructor and setters will throw IllegalArgumentException when supplied with null or blank values.
- * - Use getUsernameOptional() / getPasswordOptional() to obtain Optional-wrapped values.</p>
+ * - Use getUsernameOptional() / getPasswordOptional() to obtain Optional-wrapped values.
+ * - toString() and logs mask sensitive values to avoid leaking secrets.</p>
  */
 public final class AuthPayload {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(AuthPayload.class);
+
+    /**
+     * Replacement string used when masking values for logs.
+     */
+    private static final String MASK_SUFFIX = "****";
 
     /**
      * Username for authentication.
@@ -39,11 +45,19 @@ public final class AuthPayload {
      * @throws IllegalArgumentException if username or password is null or blank
      */
     public AuthPayload(String username, String password) {
-        validateNotBlank(username, "username");
-        validateNotBlank(password, "password");
-        this.username = username;
-        this.password = password;
-        LOGGER.debug("AuthPayload created for username='{}'", maskForLogs(username));
+        try {
+            validateNotBlank(username, "username");
+            validateNotBlank(password, "password");
+            this.username = username;
+            this.password = password;
+            LOGGER.debug("AuthPayload created for username='{}'", maskForLogs(username));
+        } catch (IllegalArgumentException ex) {
+            LOGGER.error("Failed to create AuthPayload: {}", ex.getMessage());
+            throw ex;
+        } catch (Exception ex) {
+            LOGGER.error("Unexpected error while creating AuthPayload", ex);
+            throw ex;
+        }
     }
 
     /**
@@ -82,9 +96,17 @@ public final class AuthPayload {
      * @throws IllegalArgumentException if username is null or blank
      */
     public void setUsername(String username) {
-        validateNotBlank(username, "username");
-        LOGGER.debug("Updating username from '{}' to '{}'", maskForLogs(this.username), maskForLogs(username));
-        this.username = username;
+        try {
+            validateNotBlank(username, "username");
+            LOGGER.debug("Updating username from '{}' to '{}'", maskForLogs(this.username), maskForLogs(username));
+            this.username = username;
+        } catch (IllegalArgumentException ex) {
+            LOGGER.error("Failed to update username: {}", ex.getMessage());
+            throw ex;
+        } catch (Exception ex) {
+            LOGGER.error("Unexpected error while updating username", ex);
+            throw ex;
+        }
     }
 
     /**
@@ -105,15 +127,23 @@ public final class AuthPayload {
      * @throws IllegalArgumentException if password is null or blank
      */
     public void setPassword(String password) {
-        validateNotBlank(password, "password");
-        LOGGER.debug("Updating password for username='{}'", maskForLogs(this.username));
-        this.password = password;
+        try {
+            validateNotBlank(password, "password");
+            LOGGER.debug("Updating password for username='{}'", maskForLogs(this.username));
+            this.password = password;
+        } catch (IllegalArgumentException ex) {
+            LOGGER.error("Failed to update password: {}", ex.getMessage());
+            throw ex;
+        } catch (Exception ex) {
+            LOGGER.error("Unexpected error while updating password", ex);
+            throw ex;
+        }
     }
 
     /**
      * Validates that a provided string is neither null nor blank.
      *
-     * @param value the value to validate
+     * @param value     the value to validate
      * @param fieldName the name of the field (used in exception messages and logs)
      * @throws IllegalArgumentException if value is null or blank
      */
@@ -128,7 +158,7 @@ public final class AuthPayload {
      * Utility to mask sensitive values for logging.
      *
      * @param value the value to mask
-     * @return masked representation (first character + ****) or "null" if value is null
+     * @return masked representation (first character + MASK_SUFFIX) or "null" if value is null
      */
     private static String maskForLogs(String value) {
         if (Objects.isNull(value)) {
@@ -137,11 +167,11 @@ public final class AuthPayload {
         if (value.length() <= 1) {
             return "*";
         }
-        return value.charAt(0) + "****";
+        return value.charAt(0) + MASK_SUFFIX;
     }
 
     /**
-     * Standard equals implementation.
+     * Standard equals implementation using username and password.
      *
      * @param o other object
      * @return true if same username and password
@@ -161,7 +191,7 @@ public final class AuthPayload {
     /**
      * Standard hashCode implementation consistent with equals.
      *
-     * @return hash code
+     * @return computed hash code
      */
     @Override
     public int hashCode() {
@@ -169,15 +199,15 @@ public final class AuthPayload {
     }
 
     /**
-     * Returns a string representation with sensitive fields masked.
+     * toString implementation that avoids revealing sensitive details.
      *
-     * @return string representation
+     * @return string representation with masked sensitive fields
      */
     @Override
     public String toString() {
         return "AuthPayload{" +
                 "username='" + maskForLogs(username) + '\'' +
-                ", password='" + maskForLogs(password) + '\'' +
+                ", password='[PROTECTED]'" +
                 '}';
     }
 }

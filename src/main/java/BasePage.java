@@ -41,6 +41,8 @@ public class BaseComponent {
      * @throws IllegalStateException if DriverManager does not provide a WebDriver or initialization fails
      */
     public BaseComponent() {
+        LOGGER.debug("Constructing BaseComponent for class {}", this.getClass().getName());
+
         final WebDriver tmpDriver;
         try {
             tmpDriver = DriverManager.getDriver();
@@ -76,6 +78,8 @@ public class BaseComponent {
             LOGGER.error("PageFactory initialization failed for component {}.", this.getClass().getName(), e);
             throw new IllegalStateException("PageFactory initialization failed for " + this.getClass().getName(), e);
         }
+
+        LOGGER.info("BaseComponent constructed successfully for {}.", this.getClass().getName());
     }
 
     /**

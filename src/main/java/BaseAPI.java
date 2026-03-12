@@ -24,10 +24,24 @@ import java.util.Optional;
  */
 public class BaseAPI {
 
+    /**
+     * Logger for instrumentation and error reporting.
+     */
     private static final Logger logger = LoggerFactory.getLogger(BaseAPI.class);
 
+    /**
+     * Header name for Content-Type.
+     */
     private static final String HEADER_CONTENT_TYPE = "Content-Type";
+
+    /**
+     * Header name for Accept.
+     */
     private static final String HEADER_ACCEPT = "Accept";
+
+    /**
+     * Media type for JSON payloads.
+     */
     private static final String APPLICATION_JSON = "application/json";
 
     /**
@@ -72,8 +86,9 @@ public class BaseAPI {
                 throw new IllegalStateException("API URL is invalid: missing scheme");
             }
 
-            // Use the normalized URI string to avoid unexpected whitespace or encoding issues
-            RestAssured.baseURI = uri.toString();
+            // Normalize the URI to avoid unexpected whitespace or encoding issues
+            final String normalizedBaseUri = uri.normalize().toASCIIString();
+            RestAssured.baseURI = normalizedBaseUri;
 
             final RequestSpecification spec = RestAssured.given()
                     .header(HEADER_CONTENT_TYPE, APPLICATION_JSON)
@@ -82,7 +97,7 @@ public class BaseAPI {
             if (logger.isDebugEnabled()) {
                 logger.debug("Built RequestSpecification for base URI: {}", RestAssured.baseURI);
             } else {
-                logger.info("RequestSpecification created for base URI");
+                logger.info("RequestSpecification created for base URI: {}", RestAssured.baseURI);
             }
 
             return spec;
