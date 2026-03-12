@@ -16,6 +16,10 @@ import org.slf4j.LoggerFactory;
  * <p>Usage notes:
  * - Constructor and setters will throw IllegalArgumentException when supplied with null or blank values.
  * - Use getUsernameOptional() / getPasswordOptional() to obtain Optional-wrapped values.</p>
+ *
+ * <p>Security notes:
+ * - The toString() method masks sensitive values and never exposes the raw password.
+ * - Logs also use masked representations.</p>
  */
 public final class AuthPayload {
 
@@ -159,9 +163,9 @@ public final class AuthPayload {
     }
 
     /**
-     * Standard hashCode implementation consistent with equals.
+     * Standard hashCode implementation using username and password.
      *
-     * @return hash code
+     * @return computed hash code
      */
     @Override
     public int hashCode() {
@@ -169,15 +173,16 @@ public final class AuthPayload {
     }
 
     /**
-     * Returns a string representation with sensitive fields masked.
+     * toString implementation that masks sensitive fields.
      *
-     * @return string representation
+     * @return string representation with masked sensitive values
      */
     @Override
     public String toString() {
-        return "AuthPayload{" +
-                "username='" + maskForLogs(username) + '\'' +
-                ", password='" + maskForLogs(password) + '\'' +
-                '}';
+        StringBuilder sb = new StringBuilder("AuthPayload{");
+        sb.append("username='").append(maskForLogs(username)).append('\'');
+        sb.append(", password='").append("****").append('\'');
+        sb.append('}');
+        return sb.toString();
     }
 }

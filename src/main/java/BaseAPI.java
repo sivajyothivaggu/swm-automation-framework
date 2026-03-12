@@ -48,15 +48,15 @@ public class BaseAPI {
      * @return a configured RequestSpecification ready for use
      */
     protected RequestSpecification getRequestSpec() {
-        final String rawApiUrl;
+        final String raw_api_url;
         try {
-            rawApiUrl = ConfigManager.getApiUrl();
+            raw_api_url = ConfigManager.getApiUrl();
         } catch (Exception e) {
             logger.error("Failed to retrieve API URL from ConfigManager", e);
             throw new IllegalStateException("Unable to retrieve API URL from configuration", e);
         }
 
-        final String apiUrl = Optional.ofNullable(rawApiUrl)
+        final String api_url = Optional.ofNullable(raw_api_url)
                 .map(String::trim)
                 .filter(s -> !s.isBlank())
                 .orElseThrow(() -> {
@@ -66,16 +66,16 @@ public class BaseAPI {
 
         try {
             // Validate the URL is well-formed and has a scheme (http/https)
-            final URI uri = new URI(apiUrl);
-            if (Objects.isNull(uri.getScheme()) || uri.getScheme().isBlank()) {
-                logger.error("Configured API URL '{}' does not contain a valid scheme", apiUrl);
+            final URI parsed_uri = new URI(api_url);
+            if (Objects.isNull(parsed_uri.getScheme()) || parsed_uri.getScheme().isBlank()) {
+                logger.error("Configured API URL '{}' does not contain a valid scheme", api_url);
                 throw new IllegalStateException("API URL is invalid: missing scheme");
             }
 
             // Use the normalized URI string to avoid unexpected whitespace or encoding issues
-            RestAssured.baseURI = uri.toString();
+            RestAssured.baseURI = parsed_uri.toString();
 
-            final RequestSpecification spec = RestAssured.given()
+            final RequestSpecification request_spec = RestAssured.given()
                     .header(HEADER_CONTENT_TYPE, APPLICATION_JSON)
                     .header(HEADER_ACCEPT, APPLICATION_JSON);
 
@@ -85,17 +85,17 @@ public class BaseAPI {
                 logger.info("RequestSpecification created for base URI");
             }
 
-            return spec;
+            return request_spec;
         } catch (URISyntaxException e) {
-            logger.error("Configured API URL '{}' is not a valid URI", apiUrl, e);
+            logger.error("Configured API URL '{}' is not a valid URI", api_url, e);
             throw new IllegalStateException("API URL is invalid", e);
         } catch (RuntimeException e) {
             // Re-throw runtime exceptions after logging to preserve original semantics.
-            logger.error("Runtime exception while creating RequestSpecification for base URI: {}", apiUrl, e);
+            logger.error("Runtime exception while creating RequestSpecification for base URI: {}", api_url, e);
             throw e;
         } catch (Exception e) {
             // Catch-all to ensure visibility and consistent failure mode.
-            logger.error("Failed to create RequestSpecification for base URI: {}", apiUrl, e);
+            logger.error("Failed to create RequestSpecification for base URI: {}", api_url, e);
             throw new RuntimeException("Failed to build RequestSpecification", e);
         }
     }

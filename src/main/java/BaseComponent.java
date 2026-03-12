@@ -12,14 +12,14 @@ import com.swm.core.driver.DriverManager;
 import com.swm.core.utils.WaitUtils;
 
 /**
- * BaseComponent provides common test component functionality:
+ * BaseComponent provides common functionality for page components:
  * - Obtains a WebDriver from DriverManager
- * - Initializes WaitUtils for explicit waits
+ * - Initializes a WaitUtils instance for explicit waits
  * - Initializes PageFactory elements for subclasses
  *
- * This class ensures that a valid WebDriver is present during construction
- * and provides safe accessors that return Optional values. Detailed error
- * handling and logging are included to aid diagnostics in production.
+ * <p>This class performs defensive checks during construction to ensure a valid
+ * WebDriver and WaitUtils are available. All failures are logged in detail and
+ * rethrown as IllegalStateException to fail fast in test initialization.</p>
  */
 public class BaseComponent {
     private static final Logger LOGGER = LoggerFactory.getLogger(BaseComponent.class);
@@ -45,12 +45,12 @@ public class BaseComponent {
         try {
             tmpDriver = DriverManager.getDriver();
         } catch (RuntimeException e) {
-            LOGGER.error("Failed to retrieve WebDriver from DriverManager due to exception.", e);
+            LOGGER.error("Exception while retrieving WebDriver from DriverManager.", e);
             throw new IllegalStateException("Unable to obtain WebDriver from DriverManager.", e);
         }
 
         if (Objects.isNull(tmpDriver)) {
-            LOGGER.error("Failed to construct BaseComponent: DriverManager returned null WebDriver.");
+            LOGGER.error("DriverManager returned null WebDriver during BaseComponent construction.");
             throw new IllegalStateException("WebDriver is not initialized in DriverManager.");
         }
         this.driver = tmpDriver;
@@ -80,19 +80,31 @@ public class BaseComponent {
 
     /**
      * Returns an Optional containing the WebDriver associated with this component.
+     * The driver is expected to be non-null after construction; however, Optional
+     * is returned to provide a safe access pattern for callers.
      *
-     * @return Optional of WebDriver
+     * @return Optional containing the WebDriver
      */
     public Optional<WebDriver> getDriver() {
-        return Optional.ofNullable(driver);
+        if (Objects.isNull(driver)) {
+            LOGGER.warn("getDriver() called but driver is null for component {}.", this.getClass().getName());
+            return Optional.empty();
+        }
+        LOGGER.trace("getDriver() called for component {}.", this.getClass().getName());
+        return Optional.of(driver);
     }
 
     /**
      * Returns an Optional containing the WaitUtils associated with this component.
      *
-     * @return Optional of WaitUtils
+     * @return Optional containing the WaitUtils
      */
     public Optional<WaitUtils> getWait() {
-        return Optional.ofNullable(wait);
+        if (Objects.isNull(wait)) {
+            LOGGER.warn("getWait() called but wait is null for component {}.", this.getClass().getName());
+            return Optional.empty();
+        }
+        LOGGER.trace("getWait() called for component {}.", this.getClass().getName());
+        return Optional.of(wait);
     }
 }

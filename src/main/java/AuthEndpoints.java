@@ -28,7 +28,7 @@ import java.util.Optional;
 public class AuthEndpoints extends BaseAPI {
     private static final Logger LOGGER = LoggerFactory.getLogger(AuthEndpoints.class);
 
-    // Endpoint path constants - follow UPPER_CASE naming convention for constants.
+    // Endpoint path constants
     private static final String LOGIN_ENDPOINT = "/auth/login";
     private static final String LOGOUT_ENDPOINT = "/auth/logout";
 
@@ -108,7 +108,7 @@ public class AuthEndpoints extends BaseAPI {
      * This helper provides a null-safe alternative without changing the original method signature.
      *
      * @param payload request payload (may be null depending on API contract)
-     * @return Optional containing the Response, or empty if the response was null
+     * @return Optional containing the Response, or empty if the response was null or an error occurred
      */
     public Optional<Response> loginOptional(final Object payload) {
         try {
@@ -124,16 +124,15 @@ public class AuthEndpoints extends BaseAPI {
      *
      * <p>
      * Preserves original behavior of returning the raw Response. Adds logging and error
-     * handling to make issues easier to diagnose in production.
+     * handling to make issues easier to diagnose.
      * </p>
      *
      * @return Response from the /auth/logout endpoint (may be null if RestClient returns null)
-     * @throws RuntimeException if an unexpected error occurs
+     * @throws RuntimeException if an unexpected error occurs while performing the request
      */
     public Response logout() {
         try {
             LOGGER.debug("logout called");
-            // Some APIs may expect an empty body; pass null as payload.
             final Response response = client.post(LOGOUT_ENDPOINT, null, getRequestSpec());
             if (Objects.isNull(response)) {
                 LOGGER.warn("Received null Response from POST {}", LOGOUT_ENDPOINT);
@@ -166,16 +165,5 @@ public class AuthEndpoints extends BaseAPI {
             LOGGER.error("logoutOptional encountered an error", e);
             return Optional.empty();
         }
-    }
-
-    /**
-     * Exposes the underlying RestClient for advanced usages (e.g., tests or custom interactions).
-     * Returning the client allows callers to perform additional requests while still benefiting
-     * from the encapsulated configuration of this endpoints class.
-     *
-     * @return the RestClient instance used by this AuthEndpoints
-     */
-    public RestClient getClient() {
-        return this.client;
     }
 }

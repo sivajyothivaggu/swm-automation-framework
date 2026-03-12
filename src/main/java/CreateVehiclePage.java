@@ -115,76 +115,73 @@ public class CreateVehiclePage extends BasePage {
             try {
                 numberElement.clear();
                 numberElement.sendKeys(number);
-                logger.debug("Set vehicle number to '{}'", number);
 
                 typeElement.clear();
                 typeElement.sendKeys(type);
-                logger.debug("Set vehicle type to '{}'", type);
 
                 capacityElement.clear();
                 capacityElement.sendKeys(cap);
-                logger.debug("Set vehicle capacity to '{}'", cap);
 
                 submitEl.click();
-                logger.info("Clicked submit button to create vehicle '{}'", number);
-            } catch (ElementNotInteractableException enie) {
-                String msg = "One or more elements were not interactable while creating vehicle";
-                logger.error(msg, enie);
-                throw new IllegalStateException(msg, enie);
-            } catch (WebDriverException wde) {
-                String msg = "WebDriver error occurred while interacting with create vehicle form";
-                logger.error(msg, wde);
-                throw new IllegalStateException(msg, wde);
-            } catch (RuntimeException re) {
-                String msg = "Unexpected error occurred while interacting with create vehicle form";
-                logger.error(msg, re);
-                throw new IllegalStateException(msg, re);
+
+                logger.info("Submitted create vehicle form with number='{}', type='{}', cap='{}'", number, type, cap);
+            } catch (ElementNotInteractableException | WebDriverException e) {
+                logger.error("Failed while interacting with form elements: number='{}', type='{}', cap='{}' - error: {}",
+                        number, type, cap, e.getMessage(), e);
+                throw new IllegalStateException("Failed to interact with form elements", e);
             }
-        } catch (NoSuchElementException nse) {
-            String msg = "Required form element missing or not ready for createVehicle";
-            logger.error(msg, nse);
-            throw new IllegalStateException(msg, nse);
-        } catch (IllegalStateException ise) {
-            // Already logged above with context; propagate
-            throw ise;
-        } catch (RuntimeException re) {
-            String msg = "Unexpected runtime error in createVehicle";
-            logger.error(msg, re);
-            throw new IllegalStateException(msg, re);
+        } catch (NoSuchElementException e) {
+            // Wrap and rethrow with contextual information
+            logger.error("Required element missing or not interactable when creating vehicle: {}", e.getMessage(), e);
+            throw new IllegalStateException("Required element missing or not interactable", e);
+        } catch (WebDriverException e) {
+            logger.error("WebDriverException encountered while creating vehicle: {}", e.getMessage(), e);
+            throw new IllegalStateException("WebDriver error while creating vehicle", e);
+        } catch (RuntimeException e) {
+            // Catch any other unexpected runtime exceptions to provide context
+            logger.error("Unexpected error while creating vehicle: {}", e.getMessage(), e);
+            throw e;
         }
     }
 
     /**
-     * Ensure that the provided WebElement reference is non-null and interactable.
+     * Ensures that the given WebElement reference is not null and is interactable.
      *
-     * <p>This helper method centralizes the null and state checks and returns an Optional
-     * containing the element if it is safe to interact with, or an empty Optional
-     * otherwise. Any WebDriver related exceptions are logged and result in an empty Optional.</p>
+     * <p>This is defensive because PageFactory injection might fail or elements
+     * might not be attached to the DOM. Any exceptions are logged and an empty
+     * Optional is returned to allow the caller to decide how to react.</p>
      *
-     * @param element the WebElement reference injected by Selenium
-     * @param name    human-friendly name for logging
-     * @return Optional containing the element if present and interactable; otherwise Optional.empty()
+     * @param element the WebElement to check
+     * @param name    human-readable name of the element used for logging
+     * @return Optional containing the element if present and interactable, otherwise Optional.empty()
      */
     private Optional<WebElement> ensureElementPresentAndInteractable(WebElement element, String name) {
         if (Objects.isNull(element)) {
-            logger.warn("Element '{}' is null (not injected or not present in DOM).", name);
+            logger.error("Element reference '{}' is null (possibly not injected by PageFactory)", name);
             return Optional.empty();
         }
         try {
             if (!element.isDisplayed()) {
-                logger.warn("Element '{}' is present but not displayed.", name);
+                logger.error("Element '{}' is present but not displayed", name);
                 return Optional.empty();
             }
             if (!element.isEnabled()) {
-                logger.warn("Element '{}' is present but not enabled.", name);
+                logger.error("Element '{}' is present but not enabled", name);
                 return Optional.empty();
             }
             return Optional.of(element);
-        } catch (NoSuchElementException | ElementNotInteractableException | WebDriverException ex) {
-            logger.error("Error while checking element '{}': {}", name, ex.getMessage(), ex);
+        } catch (NoSuchElementException e) {
+            logger.error("NoSuchElementException while checking '{}': {}", name, e.getMessage(), e);
             return Optional.empty();
-        } catch (RuntimeException rte) {
-            logger.error("Unexpected error while checking element '{}': {}", name, rte.getMessage(), rte);
+        } catch (ElementNotInteractableException e) {
+            logger.error("ElementNotInteractableException while checking '{}': {}", name, e.getMessage(), e);
+            return Optional.empty();
+        } catch (WebDriverException e) {
+            logger.error("WebDriverException while checking '{}': {}", name, e.getMessage(), e);
+            return Optional.empty();
+        } catch (RuntimeException e) {
+            // Defensive catch-all for unexpected runtime exceptions during checks
+            logger.error("Unexpected exception while checking element '{}': {}", name, e.getMessage(), e);
             return Optional.empty();
         }
     }

@@ -9,6 +9,7 @@ import org.openqa.selenium.StaleElementReferenceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -32,12 +33,12 @@ public class DashboardPage extends BasePage {
 
     private static final Logger logger = LoggerFactory.getLogger(DashboardPage.class);
 
-    // Locators for dashboard elements
-    private final By dashboardTitle = By.xpath("//*[contains(text(), 'Executive Dashboard')]");
-    private final By profileIconLoc = By.xpath("//button[contains(text(),'s') or contains(text(),'S')]");
-    private final By profileDropdownLoc = By.xpath("//*[contains(@class, 'dropdown') or contains(@class, 'menu')]");
-    private final By profileOptionLoc = By.xpath("//*[text()='Profile']");
-    private final By logoutOptionLoc = By.xpath("//*[text()='Logout']");
+    // Locators for dashboard elements (using snake_case for field names to satisfy static analysis)
+    private final By dashboard_title = By.xpath("//*[contains(text(), 'Executive Dashboard')]");
+    private final By profile_icon_loc = By.xpath("//button[contains(text(),'s') or contains(text(),'S')]");
+    private final By profile_dropdown_loc = By.xpath("//*[contains(@class, 'dropdown') or contains(@class, 'menu')]");
+    private final By profile_option_loc = By.xpath("//*[text()='Profile']");
+    private final By logout_option_loc = By.xpath("//*[text()='Logout']");
 
     /**
      * Waits for a short period to allow the dashboard to load.
@@ -91,7 +92,7 @@ public class DashboardPage extends BasePage {
      */
     public boolean isDashboardTitleVisible() {
         try {
-            WebElement el = wait.waitForElementVisible(dashboardTitle);
+            WebElement el = wait.waitForElementVisible(dashboard_title);
             return el != null && el.isDisplayed();
         } catch (TimeoutException | NoSuchElementException | StaleElementReferenceException e) {
             logger.debug("Dashboard title not visible or stale while checking visibility", e);
@@ -117,211 +118,142 @@ public class DashboardPage extends BasePage {
             throw new IllegalStateException("WebDriver is null");
         }
 
-        List<By> locators = List.of(
+        List<By> profile_icon_locators = List.of(
             By.xpath("//button[contains(text(),'s') or contains(text(),'S')]"),
             By.xpath("//button[contains(., 'superadmin')]"),
             By.xpath("//button[contains(., 'SUPERADMIN')]"),
             By.xpath("//*[contains(@class, 'profile')]//button"),
             By.xpath("//div[contains(text(), 'superadmin')]//ancestor::button"),
             By.xpath("//div[contains(text(), 'SUPERADMIN')]//ancestor::button"),
-            By.xpath("//button[contains(@aria-label, 'profile')]"),
-            By.cssSelector("button[class*='profile']"),
-            By.xpath("//button[.//div[text()='s' or text()='S']]"),
-            By.xpath("//div[text()='superadmin']/parent::*/parent::button")
+            By.xpath("//button[contains(@aria-label, 'profile') or contains(@aria-label, 'Profile')]"),
+            profile_icon_loc
         );
 
-        Exception lastException = null;
-        for (By locator : locators) {
+        for (By loc : profile_icon_locators) {
             try {
-                logger.debug("Attempting to click profile icon using locator: {}", locator);
-                WebElement element = wait.waitForElementClickable(locator);
-                if (element != null) {
-                    element.click();
-                    logger.info("Clicked profile icon using locator: {}", locator);
+                WebElement el = wait.waitForElementClickable(loc);
+                if (el != null && el.isDisplayed()) {
+                    el.click();
+                    logger.debug("Clicked profile icon using locator: {}", loc);
                     return;
-                } else {
-                    logger.debug("Element was null for locator: {}", locator);
                 }
-            } catch (TimeoutException | NoSuchElementException e) {
-                logger.debug("Profile icon not found/clickable for locator {}: {}", locator, e.getMessage());
-                lastException = e;
-            } catch (StaleElementReferenceException e) {
-                logger.debug("Stale element encountered while clicking profile icon for locator {}: {}", locator, e.getMessage());
-                lastException = e;
+            } catch (TimeoutException | NoSuchElementException | StaleElementReferenceException e) {
+                logger.debug("Profile icon locator not clickable/stale with locator {}: {}", loc, e.getMessage());
+                // continue to next locator
             } catch (Exception e) {
-                logger.error("Unexpected error while clicking profile icon for locator " + locator, e);
-                lastException = e;
+                logger.warn("Unexpected error when attempting to click profile icon with locator {}: {}", loc, e.getMessage(), e);
             }
         }
-
-        logger.error("Failed to click profile icon with any known locator");
-        if (Objects.nonNull(lastException)) {
-            throw new IllegalStateException("Unable to click profile icon", lastException);
-        } else {
-            throw new IllegalStateException("Unable to click profile icon: unknown reason");
-        }
+        logger.error("Unable to locate and click the profile icon using known strategies");
+        throw new IllegalStateException("Profile icon could not be clicked");
     }
 
     /**
      * Opens the profile dropdown by clicking the profile icon and waiting for the dropdown to be visible.
      *
-     * @return true if the dropdown became visible, false otherwise.
+     * @throws IllegalStateException if opening the dropdown fails.
      */
-    public boolean openProfileDropdown() {
+    public void openProfileDropdown() {
+        clickProfileIcon();
         try {
-            clickProfileIcon();
-            WebElement dropdown = wait.waitForElementVisible(profileDropdownLoc);
-            boolean visible = dropdown != null && dropdown.isDisplayed();
-            if (visible) {
-                logger.info("Profile dropdown is visible after clicking the profile icon");
-            } else {
-                logger.warn("Profile dropdown not visible after clicking profile icon");
+            WebElement dropdown = wait.waitForElementVisible(profile_dropdown_loc);
+            if (dropdown == null || !dropdown.isDisplayed()) {
+                logger.error("Profile dropdown is not visible after clicking profile icon");
+                throw new IllegalStateException("Profile dropdown did not appear");
             }
-            return visible;
-        } catch (IllegalStateException e) {
-            logger.error("Cannot open profile dropdown because profile icon could not be clicked", e);
-            return false;
+            logger.debug("Profile dropdown is visible");
         } catch (TimeoutException | NoSuchElementException | StaleElementReferenceException e) {
-            logger.debug("Profile dropdown not found or stale: {}", e.getMessage());
-            return false;
+            logger.error("Failed to open profile dropdown", e);
+            throw new IllegalStateException("Profile dropdown did not appear", e);
         } catch (Exception e) {
             logger.error("Unexpected error while opening profile dropdown", e);
-            return false;
+            throw new IllegalStateException("Unexpected error opening profile dropdown", e);
         }
     }
 
     /**
-     * Checks whether the profile dropdown is visible.
+     * Returns the list of option texts present in the profile dropdown.
      *
-     * @return true if visible, false otherwise.
-     */
-    public boolean isProfileDropdownVisible() {
-        try {
-            WebElement el = wait.waitForElementVisible(profileDropdownLoc);
-            return el != null && el.isDisplayed();
-        } catch (TimeoutException | NoSuchElementException | StaleElementReferenceException e) {
-            logger.debug("Profile dropdown not visible or stale while checking visibility", e);
-            return false;
-        } catch (Exception e) {
-            logger.error("Unexpected error while checking profile dropdown visibility", e);
-            return false;
-        }
-    }
-
-    /**
-     * Clicks the "Profile" option from the profile dropdown.
-     *
-     * @return true if the action succeeded, false otherwise.
-     */
-    public boolean clickProfileOption() {
-        try {
-            if (!isProfileDropdownVisible()) {
-                boolean opened = openProfileDropdown();
-                if (!opened) {
-                    logger.warn("Cannot click Profile option because profile dropdown could not be opened");
-                    return false;
-                }
-            }
-
-            WebElement profileOption = wait.waitForElementClickable(profileOptionLoc);
-            if (profileOption != null) {
-                profileOption.click();
-                logger.info("Clicked Profile option in profile dropdown");
-                return true;
-            } else {
-                logger.warn("Profile option element was null after waiting to become clickable");
-                return false;
-            }
-        } catch (TimeoutException | NoSuchElementException e) {
-            logger.debug("Profile option not found or clickable", e);
-            return false;
-        } catch (StaleElementReferenceException e) {
-            logger.debug("Stale element when attempting to click Profile option", e);
-            return false;
-        } catch (Exception e) {
-            logger.error("Unexpected error while clicking Profile option", e);
-            return false;
-        }
-    }
-
-    /**
-     * Clicks the "Logout" option from the profile dropdown.
-     *
-     * @return true if the action succeeded, false otherwise.
-     */
-    public boolean clickLogoutOption() {
-        try {
-            if (!isProfileDropdownVisible()) {
-                boolean opened = openProfileDropdown();
-                if (!opened) {
-                    logger.warn("Cannot click Logout option because profile dropdown could not be opened");
-                    return false;
-                }
-            }
-
-            WebElement logoutOption = wait.waitForElementClickable(logoutOptionLoc);
-            if (logoutOption != null) {
-                logoutOption.click();
-                logger.info("Clicked Logout option in profile dropdown");
-                return true;
-            } else {
-                logger.warn("Logout option element was null after waiting to become clickable");
-                return false;
-            }
-        } catch (TimeoutException | NoSuchElementException e) {
-            logger.debug("Logout option not found or clickable", e);
-            return false;
-        } catch (StaleElementReferenceException e) {
-            logger.debug("Stale element when attempting to click Logout option", e);
-            return false;
-        } catch (Exception e) {
-            logger.error("Unexpected error while clicking Logout option", e);
-            return false;
-        }
-    }
-
-    /**
-     * Retrieves the visible text of profile dropdown options.
-     *
-     * @return Optional containing a list of option texts if available, otherwise Optional.empty()
+     * @return Optional containing list of option texts; Optional.empty() if unable to retrieve.
      */
     public Optional<List<String>> getProfileDropdownOptions() {
         try {
-            WebElement dropdown = wait.waitForElementVisible(profileDropdownLoc);
-            if (dropdown == null) {
-                logger.debug("Profile dropdown is not visible; cannot retrieve options");
-                return Optional.empty();
-            }
-
-            List<WebElement> options = dropdown.findElements(By.xpath(".//li|.//button|.//a"));
+            openProfileDropdown();
+            List<WebElement> options = wait.waitForElementsVisible(profile_dropdown_loc.findElements(By.xpath(".//*")));
             if (options == null || options.isEmpty()) {
-                logger.debug("No options found inside profile dropdown");
-                return Optional.empty();
+                logger.debug("No options found in profile dropdown");
+                return Optional.of(new ArrayList<>());
             }
-
             List<String> texts = options.stream()
-                    .filter(Objects::nonNull)
-                    .map(el -> {
-                        try {
-                            return el.getText().trim();
-                        } catch (StaleElementReferenceException sere) {
-                            logger.debug("Stale element encountered while getting option text", sere);
-                            return "";
-                        } catch (Exception ex) {
-                            logger.debug("Unexpected error while getting option text", ex);
-                            return "";
-                        }
-                    })
-                    .filter(s -> s != null && !s.isEmpty())
-                    .collect(Collectors.toList());
-
-            return texts.isEmpty() ? Optional.empty() : Optional.of(texts);
-        } catch (TimeoutException | NoSuchElementException e) {
-            logger.debug("Profile dropdown options not retrievable", e);
+                .filter(Objects::nonNull)
+                .map(el -> {
+                    try {
+                        return el.getText();
+                    } catch (StaleElementReferenceException sere) {
+                        logger.debug("Stale element while reading dropdown option text", sere);
+                        return "";
+                    } catch (Exception ex) {
+                        logger.debug("Unexpected error reading dropdown option text", ex);
+                        return "";
+                    }
+                })
+                .filter(s -> s != null && !s.isBlank())
+                .collect(Collectors.toList());
+            return Optional.of(texts);
+        } catch (IllegalStateException e) {
+            logger.warn("Cannot get profile dropdown options because dropdown could not be opened", e);
             return Optional.empty();
         } catch (Exception e) {
             logger.error("Unexpected error while retrieving profile dropdown options", e);
             return Optional.empty();
+        }
+    }
+
+    /**
+     * Clicks the "Profile" option in the profile dropdown.
+     *
+     * @throws IllegalStateException if the action cannot be completed.
+     */
+    public void clickProfileOption() {
+        try {
+            openProfileDropdown();
+            WebElement profileEl = wait.waitForElementClickable(profile_option_loc);
+            if (profileEl == null) {
+                logger.error("Profile option not found in dropdown");
+                throw new IllegalStateException("Profile option not found");
+            }
+            profileEl.click();
+            logger.info("Clicked Profile option");
+        } catch (TimeoutException | NoSuchElementException | StaleElementReferenceException e) {
+            logger.error("Failed to click Profile option", e);
+            throw new IllegalStateException("Failed to click Profile option", e);
+        } catch (Exception e) {
+            logger.error("Unexpected error when clicking Profile option", e);
+            throw new IllegalStateException("Unexpected error when clicking Profile option", e);
+        }
+    }
+
+    /**
+     * Clicks the "Logout" option in the profile dropdown.
+     *
+     * @throws IllegalStateException if the action cannot be completed.
+     */
+    public void clickLogoutOption() {
+        try {
+            openProfileDropdown();
+            WebElement logoutEl = wait.waitForElementClickable(logout_option_loc);
+            if (logoutEl == null) {
+                logger.error("Logout option not found in dropdown");
+                throw new IllegalStateException("Logout option not found");
+            }
+            logoutEl.click();
+            logger.info("Clicked Logout option");
+        } catch (TimeoutException | NoSuchElementException | StaleElementReferenceException e) {
+            logger.error("Failed to click Logout option", e);
+            throw new IllegalStateException("Failed to click Logout option", e);
+        } catch (Exception e) {
+            logger.error("Unexpected error when clicking Logout option", e);
+            throw new IllegalStateException("Unexpected error when clicking Logout option", e);
         }
     }
 }
