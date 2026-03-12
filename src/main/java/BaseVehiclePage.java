@@ -15,11 +15,10 @@ import java.util.Optional;
 /**
  * Base page for vehicle-related actions in the Vehicle Management UI.
  *
- * <p>This class provides common interactions for vehicle pages such as searching,
- * opening filters, and exporting. It performs validation and robust error handling
- * for WebElement interactions and logs relevant events. Methods throw unchecked
- * exceptions when the underlying WebElement is not available or an interaction fails,
- * preserving original behavior while providing clearer diagnostics.</p>
+ * <p>This class centralizes common interactions with vehicle-related UI elements,
+ * such as searching, opening filters, and exporting. It validates inputs, wraps
+ * WebElement access in Optional, and provides robust error handling and logging
+ * to make pages that extend this class more reliable and diagnosable.</p>
  *
  * @since 1.0
  */
@@ -50,25 +49,39 @@ public class BaseVehiclePage extends BasePage {
             if (Objects.isNull(searchText)) {
                 throw new IllegalArgumentException("searchText must not be null");
             }
+
             WebElement element = getSearchBox()
                     .orElseThrow(() -> new IllegalStateException("Search box element is not initialized"));
 
             // clear existing text before sending new keys to avoid unexpected concatenation
             try {
-                element.clear();
+                if (element.isDisplayed() && element.isEnabled()) {
+                    element.clear();
+                } else {
+                    logger.debug("Search box present but not interactable for clearing");
+                }
             } catch (Exception e) {
                 // Not fatal; continue to sendKeys but log the event for diagnostics
                 logger.debug("Ignored exception while clearing search box: {}", e.getMessage(), e);
             }
 
-            element.sendKeys(searchText);
-            logger.info("Search input provided successfully");
+            try {
+                if (!element.isDisplayed() || !element.isEnabled()) {
+                    throw new ElementNotInteractableException("Search box is not interactable");
+                }
+                element.sendKeys(searchText);
+                logger.info("Search input provided successfully");
+            } catch (NoSuchElementException | StaleElementReferenceException | ElementNotInteractableException e) {
+                logger.error("WebElement interaction failed while sending keys to search box: {}", e.getMessage(), e);
+                throw new RuntimeException("Failed to interact with search box", e);
+            }
+
         } catch (IllegalArgumentException | IllegalStateException e) {
             logger.error("Invalid argument or state while searching vehicle: {}", e.getMessage(), e);
             throw e;
-        } catch (NoSuchElementException | StaleElementReferenceException | ElementNotInteractableException e) {
-            logger.error("WebElement interaction failed while searching vehicle: {}", e.getMessage(), e);
-            throw new RuntimeException("Failed to interact with search box", e);
+        } catch (RuntimeException e) {
+            // Already logged above; rethrow to preserve behavior
+            throw e;
         } catch (Exception e) {
             logger.error("Unexpected error while searching vehicle: {}", e.getMessage(), e);
             throw new RuntimeException("Unexpected error during searchVehicle", e);
@@ -91,9 +104,9 @@ public class BaseVehiclePage extends BasePage {
         } catch (IllegalStateException e) {
             logger.error("Invalid state while clicking filter button: {}", e.getMessage(), e);
             throw e;
-        } catch (NoSuchElementException | StaleElementReferenceException | ElementNotInteractableException e) {
-            logger.error("WebElement interaction failed while clicking filter button: {}", e.getMessage(), e);
-            throw new RuntimeException("Failed to click filter button", e);
+        } catch (RuntimeException e) {
+            // Already logged in safeClick or below; preserve behavior
+            throw e;
         } catch (Exception e) {
             logger.error("Unexpected error while clicking filter button: {}", e.getMessage(), e);
             throw new RuntimeException("Unexpected error during clickFilter", e);
@@ -116,9 +129,9 @@ public class BaseVehiclePage extends BasePage {
         } catch (IllegalStateException e) {
             logger.error("Invalid state while clicking export button: {}", e.getMessage(), e);
             throw e;
-        } catch (NoSuchElementException | StaleElementReferenceException | ElementNotInteractableException e) {
-            logger.error("WebElement interaction failed while clicking export button: {}", e.getMessage(), e);
-            throw new RuntimeException("Failed to click export button", e);
+        } catch (RuntimeException e) {
+            // Already logged in safeClick; rethrow
+            throw e;
         } catch (Exception e) {
             logger.error("Unexpected error while clicking export button: {}", e.getMessage(), e);
             throw new RuntimeException("Unexpected error during clickExport", e);
@@ -126,48 +139,68 @@ public class BaseVehiclePage extends BasePage {
     }
 
     /**
-     * Safely clicks a WebElement while converting common Selenium exceptions into
-     * runtime exceptions with improved logging.
+     * Returns an Optional wrapping the search box WebElement.
      *
-     * @param element the WebElement to click; assumed non-null
-     * @param name    a human-readable name for logging purposes
-     */
-    private void safeClick(WebElement element, String name) {
-        try {
-            element.click();
-        } catch (NoSuchElementException | StaleElementReferenceException | ElementNotInteractableException e) {
-            logger.error("WebElement interaction failed while clicking {}: {}", name, e.getMessage(), e);
-            throw e;
-        } catch (Exception e) {
-            logger.error("Unexpected error while clicking {}: {}", name, e.getMessage(), e);
-            throw new RuntimeException("Unexpected error during click of " + name, e);
-        }
-    }
-
-    /**
-     * Returns the search box WebElement wrapped in an Optional.
-     *
-     * @return Optional containing searchBox if present, otherwise Optional.empty()
+     * @return Optional containing the search box if present; otherwise Optional.empty()
      */
     protected Optional<WebElement> getSearchBox() {
         return Optional.ofNullable(searchBox);
     }
 
     /**
-     * Returns the filter button WebElement wrapped in an Optional.
+     * Returns an Optional wrapping the filter button WebElement.
      *
-     * @return Optional containing filterButton if present, otherwise Optional.empty()
+     * @return Optional containing the filter button if present; otherwise Optional.empty()
      */
     protected Optional<WebElement> getFilterButton() {
         return Optional.ofNullable(filterButton);
     }
 
     /**
-     * Returns the export button WebElement wrapped in an Optional.
+     * Returns an Optional wrapping the export button WebElement.
      *
-     * @return Optional containing exportButton if present, otherwise Optional.empty()
+     * @return Optional containing the export button if present; otherwise Optional.empty()
      */
     protected Optional<WebElement> getExportButton() {
         return Optional.ofNullable(exportButton);
+    }
+
+    /**
+     * Attempts to click the provided element with validation and detailed logging.
+     * This method validates that the element reference is not null and is interactable
+     * before invoking click(). Exceptions are caught, logged, and rethrown as
+     * RuntimeException to preserve existing behavior while providing diagnostics.
+     *
+     * @param element     the WebElement to click; must not be null
+     * @param elementName descriptive name used in log messages
+     * @throws IllegalStateException if {@code element} is null
+     * @throws RuntimeException      if clicking fails due to WebElement interaction issues
+     */
+    private void safeClick(WebElement element, String elementName) {
+        logger.debug("safeClick invoked for element: {}", elementName);
+        try {
+            if (Objects.isNull(element)) {
+                throw new IllegalStateException(elementName + " element reference is null");
+            }
+
+            if (!element.isDisplayed() || !element.isEnabled()) {
+                String msg = String.format("%s is not displayed or not enabled", elementName);
+                logger.warn(msg);
+                throw new ElementNotInteractableException(msg);
+            }
+
+            try {
+                element.click();
+            } catch (NoSuchElementException | StaleElementReferenceException | ElementNotInteractableException e) {
+                logger.error("WebElement interaction failed while clicking {}: {}", elementName, e.getMessage(), e);
+                throw new RuntimeException("Failed to click " + elementName, e);
+            } catch (Exception e) {
+                logger.error("Unexpected exception while clicking {}: {}", elementName, e.getMessage(), e);
+                throw new RuntimeException("Unexpected error while clicking " + elementName, e);
+            }
+        } catch (IllegalStateException e) {
+            logger.error("Illegal state in safeClick for {}: {}", elementName, e.getMessage(), e);
+            throw e;
+        }
     }
 }

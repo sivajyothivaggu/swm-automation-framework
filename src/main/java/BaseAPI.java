@@ -9,6 +9,7 @@ import org.slf4j.LoggerFactory;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * BaseAPI provides a centralized place to create and configure the RestAssured RequestSpecification
@@ -47,28 +48,41 @@ public class BaseAPI {
      * @return a configured RequestSpecification ready for use
      */
     protected RequestSpecification getRequestSpec() {
-        final String apiUrl = ConfigManager.getApiUrl();
-
-        if (Objects.isNull(apiUrl) || apiUrl.isBlank()) {
-            logger.error("Configured API URL is null or blank. Check ConfigManager.getApiUrl()");
-            throw new IllegalStateException("API URL is not configured");
+        final String rawApiUrl;
+        try {
+            rawApiUrl = ConfigManager.getApiUrl();
+        } catch (Exception e) {
+            logger.error("Failed to retrieve API URL from ConfigManager", e);
+            throw new IllegalStateException("Unable to retrieve API URL from configuration", e);
         }
+
+        final String apiUrl = Optional.ofNullable(rawApiUrl)
+                .map(String::trim)
+                .filter(s -> !s.isBlank())
+                .orElseThrow(() -> {
+                    logger.error("Configured API URL is null or blank. Check ConfigManager.getApiUrl()");
+                    return new IllegalStateException("API URL is not configured");
+                });
 
         try {
             // Validate the URL is well-formed and has a scheme (http/https)
-            final URI uri = new URI(apiUrl.trim());
+            final URI uri = new URI(apiUrl);
             if (Objects.isNull(uri.getScheme()) || uri.getScheme().isBlank()) {
                 logger.error("Configured API URL '{}' does not contain a valid scheme", apiUrl);
                 throw new IllegalStateException("API URL is invalid: missing scheme");
             }
 
-            RestAssured.baseURI = apiUrl;
+            // Use the normalized URI string to avoid unexpected whitespace or encoding issues
+            RestAssured.baseURI = uri.toString();
+
             final RequestSpecification spec = RestAssured.given()
                     .header(HEADER_CONTENT_TYPE, APPLICATION_JSON)
                     .header(HEADER_ACCEPT, APPLICATION_JSON);
 
             if (logger.isDebugEnabled()) {
-                logger.debug("Built RequestSpecification for base URI: {}", apiUrl);
+                logger.debug("Built RequestSpecification for base URI: {}", RestAssured.baseURI);
+            } else {
+                logger.info("RequestSpecification created for base URI");
             }
 
             return spec;

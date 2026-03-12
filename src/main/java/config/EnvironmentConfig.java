@@ -1,5 +1,6 @@
 package com.swm.core.config;
 
+import java.lang.reflect.Method;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -7,16 +8,17 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * EnvironmentConfig is responsible for loading environment specific configuration
+ * EnvironmentConfig is responsible for loading environment-specific configuration
  * from a properties file named &lt;env&gt;.properties using PropertyReader.
  *
  * <p>This class performs validation of the input environment identifier, loads
  * properties with defensive error handling and logs meaningful messages. All
  * exposed getters return Optional to make nullable values explicit to callers.</p>
  *
- * Usage example:
+ * <p>Usage example:
  * EnvironmentConfig cfg = new EnvironmentConfig("dev");
  * Optional<String> url = cfg.getUrl();
+ * </p>
  */
 public final class EnvironmentConfig {
     private static final Logger LOGGER = LoggerFactory.getLogger(EnvironmentConfig.class);
@@ -40,7 +42,7 @@ public final class EnvironmentConfig {
      *
      * @param env environment identifier (must not be null/empty)
      * @throws IllegalArgumentException if env is null or empty
-     * @throws IllegalStateException if properties cannot be loaded
+     * @throws IllegalStateException    if properties cannot be loaded
      */
     public EnvironmentConfig(String env) {
         if (Objects.isNull(env) || env.trim().isEmpty()) {
@@ -59,8 +61,8 @@ public final class EnvironmentConfig {
         try {
             reader = new PropertyReader(fileName);
 
-            // Use try-with-resources when possible: if reader implements AutoCloseable,
-            // the inner try will close it automatically; if not, resource is null and no close is attempted.
+            // If PropertyReader implements AutoCloseable we use try-with-resources to ensure it is closed.
+            // If not, the resource will be null and nothing will be closed here; the finally block will attempt a reflective close.
             try (AutoCloseable ignored = reader instanceof AutoCloseable ? (AutoCloseable) reader : null) {
                 tmpUrl = safeTrim(reader.getProperty(PROP_APP_URL));
                 tmpApiUrl = safeTrim(reader.getProperty(PROP_API_URL));
@@ -81,7 +83,7 @@ public final class EnvironmentConfig {
                         tmpUrl,
                         tmpApiUrl,
                         tmpDbUrl,
-                        tmpDbUser == null ? "<null>" : "<removed-for-security>");
+                        Objects.isNull(tmpDbUser) ? "<null>" : maskValue(tmpDbUser));
             } // try-with-resources will close reader if it is AutoCloseable
         } catch (RuntimeException re) {
             LOGGER.error("Runtime exception while loading properties from {}", fileName, re);
@@ -91,11 +93,12 @@ public final class EnvironmentConfig {
             throw new IllegalStateException("Failed to load environment properties from " + fileName, e);
         } finally {
             // If reader existed but did not implement AutoCloseable, attempt to close via reflection if a close method exists.
-            // This preserves the previous behavior where we attempted to close the reader if possible.
             if (reader != null && !(reader instanceof AutoCloseable)) {
                 try {
-                    // Attempt to invoke a close() method if present to avoid leaking resources.
-                    reader.getClass().getMethod("close").invoke(reader);
+                    Method closeMethod = reader.getClass().getMethod("close");
+                    if (closeMethod != null) {
+                        closeMethod.invoke(reader);
+                    }
                 } catch (NoSuchMethodException nsme) {
                     // No close method available - nothing to do.
                     LOGGER.debug("PropertyReader for {} does not implement AutoCloseable and has no close() method", fileName);
@@ -113,55 +116,58 @@ public final class EnvironmentConfig {
     }
 
     /**
-     * Returns the application URL if present.
+     * Get the application URL.
      *
-     * @return Optional containing the application URL or empty if not present
+     * @return Optional containing the URL if present, otherwise an empty Optional
      */
     public Optional<String> getUrl() {
         return Optional.ofNullable(url);
     }
 
     /**
-     * Returns the API URL if present.
+     * Get the API URL.
      *
-     * @return Optional containing the API URL or empty if not present
+     * @return Optional containing the API URL if present, otherwise an empty Optional
      */
     public Optional<String> getApiUrl() {
         return Optional.ofNullable(apiUrl);
     }
 
     /**
-     * Returns the database URL if present.
+     * Get the database URL.
      *
-     * @return Optional containing the database URL or empty if not present
+     * @return Optional containing the database URL if present, otherwise an empty Optional
      */
     public Optional<String> getDbUrl() {
         return Optional.ofNullable(dbUrl);
     }
 
     /**
-     * Returns the database user if present.
+     * Get the database user.
      *
-     * @return Optional containing the database user or empty if not present
+     * @return Optional containing the database user if present, otherwise an empty Optional
      */
     public Optional<String> getDbUser() {
         return Optional.ofNullable(dbUser);
     }
 
     /**
-     * Returns the database password if present.
+     * Get the database password.
      *
-     * @return Optional containing the database password or empty if not present
+     * <p>Note: callers should handle this value carefully and avoid logging it. This method
+     * returns the raw password as read from the properties file.</p>
+     *
+     * @return Optional containing the database password if present, otherwise an empty Optional
      */
     public Optional<String> getDbPassword() {
         return Optional.ofNullable(dbPassword);
     }
 
     /**
-     * Helper to safely trim a string value. Uses Objects.isNull for null checks to follow codebase practice.
+     * Utility to trim a string and convert empty strings to null.
      *
-     * @param value input string
-     * @return trimmed string or null if input was null
+     * @param value input value
+     * @return trimmed string or null if input was null or trimmed to empty
      */
     private static String safeTrim(String value) {
         if (Objects.isNull(value)) {
@@ -169,5 +175,33 @@ public final class EnvironmentConfig {
         }
         String trimmed = value.trim();
         return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    /**
+     * Mask a sensitive value by keeping the first and last character if length permits.
+     *
+     * @param value sensitive value
+     * @return masked representation suitable for logging
+     */
+    private static String maskValue(String value) {
+        if (Objects.isNull(value)) {
+            return "<null>";
+        }
+        int len = value.length();
+        if (len <= 2) {
+            return "**";
+        }
+        return value.charAt(0) + "****" + value.charAt(len - 1);
+    }
+
+    @Override
+    public String toString() {
+        return "EnvironmentConfig{" +
+                "url=" + (Objects.isNull(url) ? "<null>" : url) +
+                ", apiUrl=" + (Objects.isNull(apiUrl) ? "<null>" : apiUrl) +
+                ", dbUrl=" + (Objects.isNull(dbUrl) ? "<null>" : dbUrl) +
+                ", dbUser=" + (Objects.isNull(dbUser) ? "<null>" : maskValue(dbUser)) +
+                ", dbPassword=" + (Objects.isNull(dbPassword) ? "<null>" : "<masked>") +
+                '}';
     }
 }

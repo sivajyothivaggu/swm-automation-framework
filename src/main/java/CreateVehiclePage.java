@@ -27,15 +27,27 @@ import com.swm.core.base.BasePage;
 public class CreateVehiclePage extends BasePage {
     private static final Logger logger = LoggerFactory.getLogger(CreateVehiclePage.class);
 
+    /**
+     * Input field for vehicle number/identifier.
+     */
     @FindBy(id = "vehicle-number")
     private WebElement vehicleNumber;
 
+    /**
+     * Input field for vehicle type.
+     */
     @FindBy(id = "vehicle-type")
     private WebElement vehicleType;
 
+    /**
+     * Input field for capacity.
+     */
     @FindBy(id = "capacity")
     private WebElement capacity;
 
+    /**
+     * Submit button for the create vehicle form.
+     */
     @FindBy(id = "submit-btn")
     private WebElement submitButton;
 
@@ -55,7 +67,7 @@ public class CreateVehiclePage extends BasePage {
      *                                  or an unexpected WebDriver error occurs
      */
     public void createVehicle(String number, String type, String cap) {
-        // Validate parameters
+        // Validate parameters using Objects.isNull for null checks
         if (Objects.isNull(number) || number.isBlank()) {
             logger.error("createVehicle called with invalid 'number': {}", number);
             throw new IllegalArgumentException("Parameter 'number' must not be null or blank");
@@ -103,98 +115,77 @@ public class CreateVehiclePage extends BasePage {
             try {
                 numberElement.clear();
                 numberElement.sendKeys(number);
+                logger.debug("Set vehicle number to '{}'", number);
 
                 typeElement.clear();
                 typeElement.sendKeys(type);
+                logger.debug("Set vehicle type to '{}'", type);
 
                 capacityElement.clear();
                 capacityElement.sendKeys(cap);
+                logger.debug("Set vehicle capacity to '{}'", cap);
 
                 submitEl.click();
-
-                logger.info("CreateVehicle submitted successfully for vehicleNumber='{}', vehicleType='{}', capacity='{}'",
-                        number, type, cap);
-            } catch (WebDriverException e) {
-                // Element became stale or not interactable during interaction
-                logger.error("Failed interacting with form elements while creating vehicle: number='{}', type='{}', cap='{}'",
-                        number, type, cap, e);
-                throw new IllegalStateException("Failed interacting with form elements", e);
+                logger.info("Clicked submit button to create vehicle '{}'", number);
+            } catch (ElementNotInteractableException enie) {
+                String msg = "One or more elements were not interactable while creating vehicle";
+                logger.error(msg, enie);
+                throw new IllegalStateException(msg, enie);
+            } catch (WebDriverException wde) {
+                String msg = "WebDriver error occurred while interacting with create vehicle form";
+                logger.error(msg, wde);
+                throw new IllegalStateException(msg, wde);
+            } catch (RuntimeException re) {
+                String msg = "Unexpected error occurred while interacting with create vehicle form";
+                logger.error(msg, re);
+                throw new IllegalStateException(msg, re);
             }
-
-        } catch (NoSuchElementException | ElementNotInteractableException e) {
-            logger.error("Element issue while attempting to create vehicle: number='{}', type='{}', cap='{}'",
-                    number, type, cap, e);
-            throw new IllegalStateException("UI element not available or not interactable", e);
-        } catch (WebDriverException e) {
-            logger.error("WebDriver error while attempting to create vehicle: number='{}', type='{}', cap='{}'",
-                    number, type, cap, e);
-            throw new IllegalStateException("WebDriver error occurred while creating vehicle", e);
-        } catch (RuntimeException e) {
-            logger.error("Unexpected runtime error while attempting to create vehicle: number='{}', type='{}', cap='{}'",
-                    number, type, cap, e);
-            throw e; // rethrow runtime exceptions to preserve calling behavior
-        } catch (Exception e) {
-            logger.error("Unexpected checked exception while attempting to create vehicle: number='{}', type='{}', cap='{}'",
-                    number, type, cap, e);
-            throw new IllegalStateException("Unexpected error occurred while creating vehicle", e);
+        } catch (NoSuchElementException nse) {
+            String msg = "Required form element missing or not ready for createVehicle";
+            logger.error(msg, nse);
+            throw new IllegalStateException(msg, nse);
+        } catch (IllegalStateException ise) {
+            // Already logged above with context; propagate
+            throw ise;
+        } catch (RuntimeException re) {
+            String msg = "Unexpected runtime error in createVehicle";
+            logger.error(msg, re);
+            throw new IllegalStateException(msg, re);
         }
     }
 
     /**
-     * Ensure the provided element is not null and appears to be interactable.
+     * Ensure that the provided WebElement reference is non-null and interactable.
      *
-     * <p>Returns an Optional containing the element when it appears usable, or an empty
-     * Optional when the element is missing or not enabled/displayed. This method does not
-     * swallow WebDriverException thrown by the underlying Selenium calls; such exceptions
-     * are propagated to the caller so they can be handled with context.</p>
+     * <p>This helper method centralizes the null and state checks and returns an Optional
+     * containing the element if it is safe to interact with, or an empty Optional
+     * otherwise. Any WebDriver related exceptions are logged and result in an empty Optional.</p>
      *
-     * @param element the WebElement to check
-     * @param name    logical name used for logging
-     * @return Optional of the provided WebElement if present and interactable; otherwise Optional.empty()
-     * @throws WebDriverException if underlying WebDriver calls fail unexpectedly
+     * @param element the WebElement reference injected by Selenium
+     * @param name    human-friendly name for logging
+     * @return Optional containing the element if present and interactable; otherwise Optional.empty()
      */
     private Optional<WebElement> ensureElementPresentAndInteractable(WebElement element, String name) {
         if (Objects.isNull(element)) {
-            logger.warn("Element '{}' is null (likely not injected by PageFactory)", name);
+            logger.warn("Element '{}' is null (not injected or not present in DOM).", name);
             return Optional.empty();
         }
-
         try {
-            boolean displayed;
-            boolean enabled;
-
-            try {
-                displayed = element.isDisplayed();
-            } catch (WebDriverException e) {
-                logger.warn("Unable to determine visibility for element '{}'", name, e);
-                throw e;
-            }
-
-            try {
-                enabled = element.isEnabled();
-            } catch (WebDriverException e) {
-                logger.warn("Unable to determine enabled state for element '{}'", name, e);
-                throw e;
-            }
-
-            if (!displayed) {
-                logger.warn("Element '{}' is not displayed", name);
+            if (!element.isDisplayed()) {
+                logger.warn("Element '{}' is present but not displayed.", name);
                 return Optional.empty();
             }
-            if (!enabled) {
-                logger.warn("Element '{}' is not enabled", name);
+            if (!element.isEnabled()) {
+                logger.warn("Element '{}' is present but not enabled.", name);
                 return Optional.empty();
             }
-
             return Optional.of(element);
-        } catch (WebDriverException e) {
-            // Bubble up WebDriver issues for callers to handle and log with context
-            logger.error("WebDriverException while validating element '{}'", name, e);
-            throw e;
-        } catch (Exception e) {
-            logger.error("Unexpected exception while validating element '{}'", name, e);
-            // Convert to a WebDriverException-like failure so callers see consistent types
-            throw new WebDriverException("Unexpected error while validating element: " + name, e);
+        } catch (NoSuchElementException | ElementNotInteractableException | WebDriverException ex) {
+            logger.error("Error while checking element '{}': {}", name, ex.getMessage(), ex);
+            return Optional.empty();
+        } catch (RuntimeException rte) {
+            logger.error("Unexpected error while checking element '{}': {}", name, rte.getMessage(), rte);
+            return Optional.empty();
         }
     }
 }

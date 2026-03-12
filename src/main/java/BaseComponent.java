@@ -18,7 +18,8 @@ import com.swm.core.utils.WaitUtils;
  * - Initializes PageFactory elements for subclasses
  *
  * This class ensures that a valid WebDriver is present during construction
- * and provides safe accessors that return Optional values.
+ * and provides safe accessors that return Optional values. Detailed error
+ * handling and logging are included to aid diagnostics in production.
  */
 public class BaseComponent {
     private static final Logger LOGGER = LoggerFactory.getLogger(BaseComponent.class);
@@ -37,24 +38,43 @@ public class BaseComponent {
      * Constructs a BaseComponent by retrieving the WebDriver from DriverManager,
      * initializing WaitUtils, and initializing PageFactory elements.
      *
-     * @throws IllegalStateException if DriverManager does not provide a WebDriver
-     * @throws RuntimeException if PageFactory initialization fails
+     * @throws IllegalStateException if DriverManager does not provide a WebDriver or initialization fails
      */
     public BaseComponent() {
-        this.driver = DriverManager.getDriver();
+        final WebDriver tmpDriver;
+        try {
+            tmpDriver = DriverManager.getDriver();
+        } catch (RuntimeException e) {
+            LOGGER.error("Failed to retrieve WebDriver from DriverManager due to exception.", e);
+            throw new IllegalStateException("Unable to obtain WebDriver from DriverManager.", e);
+        }
 
-        if (Objects.isNull(this.driver)) {
+        if (Objects.isNull(tmpDriver)) {
             LOGGER.error("Failed to construct BaseComponent: DriverManager returned null WebDriver.");
             throw new IllegalStateException("WebDriver is not initialized in DriverManager.");
         }
+        this.driver = tmpDriver;
 
-        this.wait = new WaitUtils(this.driver);
+        final WaitUtils tmpWait;
+        try {
+            tmpWait = new WaitUtils(this.driver);
+        } catch (RuntimeException e) {
+            LOGGER.error("Failed to initialize WaitUtils for component {}.", this.getClass().getName(), e);
+            throw new IllegalStateException("Failed to initialize WaitUtils.", e);
+        }
+
+        if (Objects.isNull(tmpWait)) {
+            LOGGER.error("WaitUtils initialization returned null for component {}.", this.getClass().getName());
+            throw new IllegalStateException("WaitUtils is not initialized.");
+        }
+        this.wait = tmpWait;
 
         try {
             PageFactory.initElements(this.driver, this);
+            LOGGER.debug("PageFactory initialized for component {}.", this.getClass().getName());
         } catch (RuntimeException e) {
             LOGGER.error("PageFactory initialization failed for component {}.", this.getClass().getName(), e);
-            throw e;
+            throw new IllegalStateException("PageFactory initialization failed for " + this.getClass().getName(), e);
         }
     }
 

@@ -53,7 +53,7 @@ public class AuthEndpoints extends BaseAPI {
      * @param client RestClient instance to use; must not be null
      * @throws IllegalArgumentException if client is null
      */
-    public AuthEndpoints(RestClient client) {
+    public AuthEndpoints(final RestClient client) {
         if (Objects.isNull(client)) {
             throw new IllegalArgumentException("RestClient must not be null");
         }
@@ -73,7 +73,7 @@ public class AuthEndpoints extends BaseAPI {
      * @return Response from the /auth/login endpoint (may be null if RestClient returns null)
      * @throws RuntimeException if an unexpected error occurs while performing the request
      */
-    public Response login(Object payload) {
+    public Response login(final Object payload) {
         try {
             if (Objects.isNull(payload)) {
                 LOGGER.debug("login called with null payload");
@@ -81,7 +81,7 @@ public class AuthEndpoints extends BaseAPI {
                 LOGGER.debug("login called with payload of type: {}", payload.getClass().getSimpleName());
             }
 
-            Response response = client.post(LOGIN_ENDPOINT, payload, getRequestSpec());
+            final Response response = client.post(LOGIN_ENDPOINT, payload, getRequestSpec());
             if (Objects.isNull(response)) {
                 LOGGER.warn("Received null Response from POST {}", LOGIN_ENDPOINT);
             } else {
@@ -110,8 +110,13 @@ public class AuthEndpoints extends BaseAPI {
      * @param payload request payload (may be null depending on API contract)
      * @return Optional containing the Response, or empty if the response was null
      */
-    public Optional<Response> loginOptional(Object payload) {
-        return Optional.ofNullable(login(payload));
+    public Optional<Response> loginOptional(final Object payload) {
+        try {
+            return Optional.ofNullable(login(payload));
+        } catch (RuntimeException e) {
+            LOGGER.error("loginOptional encountered an error", e);
+            return Optional.empty();
+        }
     }
 
     /**
@@ -123,12 +128,13 @@ public class AuthEndpoints extends BaseAPI {
      * </p>
      *
      * @return Response from the /auth/logout endpoint (may be null if RestClient returns null)
-     * @throws RuntimeException if an unexpected error occurs while performing the request
+     * @throws RuntimeException if an unexpected error occurs
      */
     public Response logout() {
         try {
             LOGGER.debug("logout called");
-            Response response = client.post(LOGOUT_ENDPOINT, null, getRequestSpec());
+            // Some APIs may expect an empty body; pass null as payload.
+            final Response response = client.post(LOGOUT_ENDPOINT, null, getRequestSpec());
             if (Objects.isNull(response)) {
                 LOGGER.warn("Received null Response from POST {}", LOGOUT_ENDPOINT);
             } else {
@@ -149,11 +155,27 @@ public class AuthEndpoints extends BaseAPI {
     }
 
     /**
-     * Performs logout and returns an Optional-wrapped Response for callers that prefer null-safety.
+     * Performs logout and returns an Optional-wrapped Response.
      *
-     * @return Optional containing the Response, or empty if the response was null
+     * @return Optional containing the Response, or empty if the response was null or an error occurred
      */
     public Optional<Response> logoutOptional() {
-        return Optional.ofNullable(logout());
+        try {
+            return Optional.ofNullable(logout());
+        } catch (RuntimeException e) {
+            LOGGER.error("logoutOptional encountered an error", e);
+            return Optional.empty();
+        }
+    }
+
+    /**
+     * Exposes the underlying RestClient for advanced usages (e.g., tests or custom interactions).
+     * Returning the client allows callers to perform additional requests while still benefiting
+     * from the encapsulated configuration of this endpoints class.
+     *
+     * @return the RestClient instance used by this AuthEndpoints
+     */
+    public RestClient getClient() {
+        return this.client;
     }
 }
