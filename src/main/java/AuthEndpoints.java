@@ -111,7 +111,12 @@ public class AuthEndpoints extends BaseAPI {
      * @return Optional containing the Response, or empty if the response was null
      */
     public Optional<Response> loginOptional(Object payload) {
-        return Optional.ofNullable(login(payload));
+        try {
+            return Optional.ofNullable(login(payload));
+        } catch (RuntimeException e) {
+            LOGGER.warn("loginOptional encountered an error, returning empty Optional", e);
+            return Optional.empty();
+        }
     }
 
     /**
@@ -123,11 +128,14 @@ public class AuthEndpoints extends BaseAPI {
      * </p>
      *
      * @return Response from the /auth/logout endpoint (may be null if RestClient returns null)
-     * @throws RuntimeException if an unexpected error occurs while performing the request
+     * @throws RuntimeException if an unexpected error occurs
      */
     public Response logout() {
         try {
-            LOGGER.debug("logout called");
+            LOGGER.debug("logout called for endpoint {}", LOGOUT_ENDPOINT);
+
+            // Use POST for logout to preserve typical semantics (many APIs implement logout as POST).
+            // If RestClient and API expect a different HTTP method, adapt accordingly.
             Response response = client.post(LOGOUT_ENDPOINT, null, getRequestSpec());
             if (Objects.isNull(response)) {
                 LOGGER.warn("Received null Response from POST {}", LOGOUT_ENDPOINT);
@@ -149,11 +157,16 @@ public class AuthEndpoints extends BaseAPI {
     }
 
     /**
-     * Performs logout and returns an Optional-wrapped Response for callers that prefer null-safety.
+     * Performs logout and returns an Optional-wrapped Response.
      *
-     * @return Optional containing the Response, or empty if the response was null
+     * @return Optional containing the Response, or empty if an error occurred or the response was null
      */
     public Optional<Response> logoutOptional() {
-        return Optional.ofNullable(logout());
+        try {
+            return Optional.ofNullable(logout());
+        } catch (RuntimeException e) {
+            LOGGER.warn("logoutOptional encountered an error, returning empty Optional", e);
+            return Optional.empty();
+        }
     }
 }

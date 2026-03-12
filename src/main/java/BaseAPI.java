@@ -36,52 +36,67 @@ public class BaseAPI {
      * Behavior:
      * - Validates that the API URL is present and non-blank in configuration. If missing, logs an error
      *   and throws an IllegalStateException to fail fast.
-     * - Validates that the API URL is a well-formed URI with a scheme.
+     * - Validates that the API URL is a well-formed URI with a scheme and host.
      * - Sets RestAssured.baseURI to the configured API URL.
      * - Builds the RequestSpecification and returns it.
      *
-     * Throws:
+     * Exceptions:
      * - IllegalStateException if API URL is null, blank, or invalid.
      * - RuntimeException if building the RequestSpecification fails for any other reason.
      *
-     * @return a configured RequestSpecification ready for use
+     * @return a configured, non-null RequestSpecification ready for use
      */
     protected RequestSpecification getRequestSpec() {
-        final String apiUrl = ConfigManager.getApiUrl();
+        final String api_url = ConfigManager.getApiUrl();
 
-        if (Objects.isNull(apiUrl) || apiUrl.isBlank()) {
+        if (Objects.isNull(api_url) || api_url.isBlank()) {
             logger.error("Configured API URL is null or blank. Check ConfigManager.getApiUrl()");
             throw new IllegalStateException("API URL is not configured");
         }
 
         try {
-            // Validate the URL is well-formed and has a scheme (http/https)
-            final URI uri = new URI(apiUrl.trim());
-            if (Objects.isNull(uri.getScheme()) || uri.getScheme().isBlank()) {
-                logger.error("Configured API URL '{}' does not contain a valid scheme", apiUrl);
+            // Trim and validate the URL is well-formed and has a scheme and host (http/https)
+            final String trimmed_url = api_url.trim();
+            final URI uri_obj = new URI(trimmed_url);
+
+            final String scheme = uri_obj.getScheme();
+            if (Objects.isNull(scheme) || scheme.isBlank()) {
+                logger.error("Configured API URL '{}' does not contain a valid scheme", api_url);
                 throw new IllegalStateException("API URL is invalid: missing scheme");
             }
 
-            RestAssured.baseURI = apiUrl;
-            final RequestSpecification spec = RestAssured.given()
+            final String host = uri_obj.getHost();
+            if (Objects.isNull(host) || host.isBlank()) {
+                // Some URIs might be opaque (e.g., mailto:). We require a host for HTTP-based APIs.
+                logger.error("Configured API URL '{}' does not contain a valid host", api_url);
+                throw new IllegalStateException("API URL is invalid: missing host");
+            }
+
+            // Prefer the normalized URI string to set the base URI
+            RestAssured.baseURI = uri_obj.toString();
+
+            final RequestSpecification request_spec = RestAssured.given()
                     .header(HEADER_CONTENT_TYPE, APPLICATION_JSON)
                     .header(HEADER_ACCEPT, APPLICATION_JSON);
 
+            if (logger.isInfoEnabled()) {
+                logger.info("Configured RestAssured base URI: {}", RestAssured.baseURI);
+            }
             if (logger.isDebugEnabled()) {
-                logger.debug("Built RequestSpecification for base URI: {}", apiUrl);
+                logger.debug("Built RequestSpecification for base URI: {}", RestAssured.baseURI);
             }
 
-            return spec;
+            return request_spec;
         } catch (URISyntaxException e) {
-            logger.error("Configured API URL '{}' is not a valid URI", apiUrl, e);
+            logger.error("Configured API URL '{}' is not a valid URI", api_url, e);
             throw new IllegalStateException("API URL is invalid", e);
         } catch (RuntimeException e) {
             // Re-throw runtime exceptions after logging to preserve original semantics.
-            logger.error("Runtime exception while creating RequestSpecification for base URI: {}", apiUrl, e);
+            logger.error("Runtime exception while creating RequestSpecification for base URI: {}", api_url, e);
             throw e;
         } catch (Exception e) {
             // Catch-all to ensure visibility and consistent failure mode.
-            logger.error("Failed to create RequestSpecification for base URI: {}", apiUrl, e);
+            logger.error("Failed to create RequestSpecification for base URI: {}", api_url, e);
             throw new RuntimeException("Failed to build RequestSpecification", e);
         }
     }

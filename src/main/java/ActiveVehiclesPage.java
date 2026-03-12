@@ -52,13 +52,9 @@ public final class ActiveVehiclesPage extends BaseVehiclePage {
                 return Optional.empty();
             }
             return Optional.of(trimmed);
-        } catch (RuntimeException re) {
-            // Defensive: log unexpected runtime exceptions and return empty to preserve callers' stability
-            logger.error("Runtime error validating vehicleId", re);
-            return Optional.empty();
         } catch (Exception e) {
             // Defensive: log unexpected exceptions and return empty to preserve callers' stability
-            logger.error("Unexpected error validating vehicleId", e);
+            logger.error("Error validating vehicleId", e);
             return Optional.empty();
         }
     }
@@ -79,9 +75,6 @@ public final class ActiveVehiclesPage extends BaseVehiclePage {
             logger.trace("Checking ActiveVehiclesPage readiness");
             // Placeholder: real checks would be implemented here.
             return true;
-        } catch (RuntimeException re) {
-            logger.error("Runtime error while checking page readiness", re);
-            return false;
         } catch (Exception e) {
             logger.error("Error while checking page readiness", e);
             return false;

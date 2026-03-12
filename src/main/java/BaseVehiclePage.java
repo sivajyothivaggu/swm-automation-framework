@@ -126,48 +126,60 @@ public class BaseVehiclePage extends BasePage {
     }
 
     /**
-     * Safely clicks a WebElement while converting common Selenium exceptions into
-     * runtime exceptions with improved logging.
+     * Safely clicks the provided WebElement, logging and translating exceptions to
+     * runtime exceptions with contextual information. This centralizes click behavior
+     * and ensures consistent diagnostics and error handling across the page.
      *
-     * @param element the WebElement to click; assumed non-null
-     * @param name    a human-readable name for logging purposes
+     * @param element  the WebElement to click; must not be null
+     * @param elementName descriptive name of the element for logging
+     * @throws IllegalArgumentException if {@code element} or {@code elementName} is null
+     * @throws RuntimeException         if clicking fails
      */
-    private void safeClick(WebElement element, String name) {
+    protected void safeClick(WebElement element, String elementName) {
+        if (Objects.isNull(element)) {
+            throw new IllegalArgumentException("element must not be null");
+        }
+        if (Objects.isNull(elementName) || elementName.trim().isEmpty()) {
+            throw new IllegalArgumentException("elementName must not be null or empty");
+        }
+
+        logger.debug("Attempting to click element: {}", elementName);
         try {
             element.click();
+            logger.debug("Clicked element: {}", elementName);
         } catch (NoSuchElementException | StaleElementReferenceException | ElementNotInteractableException e) {
-            logger.error("WebElement interaction failed while clicking {}: {}", name, e.getMessage(), e);
+            logger.error("Failed to click {} due to WebElement issue: {}", elementName, e.getMessage(), e);
             throw e;
         } catch (Exception e) {
-            logger.error("Unexpected error while clicking {}: {}", name, e.getMessage(), e);
-            throw new RuntimeException("Unexpected error during click of " + name, e);
+            logger.error("Unexpected error while clicking {}: {}", elementName, e.getMessage(), e);
+            throw new RuntimeException("Failed to click " + elementName, e);
         }
     }
 
     /**
-     * Returns the search box WebElement wrapped in an Optional.
+     * Returns an Optional wrapping the search box WebElement.
      *
-     * @return Optional containing searchBox if present, otherwise Optional.empty()
+     * @return Optional of searchBox
      */
     protected Optional<WebElement> getSearchBox() {
-        return Optional.ofNullable(searchBox);
+        return Optional.ofNullable(this.searchBox);
     }
 
     /**
-     * Returns the filter button WebElement wrapped in an Optional.
+     * Returns an Optional wrapping the filter button WebElement.
      *
-     * @return Optional containing filterButton if present, otherwise Optional.empty()
+     * @return Optional of filterButton
      */
     protected Optional<WebElement> getFilterButton() {
-        return Optional.ofNullable(filterButton);
+        return Optional.ofNullable(this.filterButton);
     }
 
     /**
-     * Returns the export button WebElement wrapped in an Optional.
+     * Returns an Optional wrapping the export button WebElement.
      *
-     * @return Optional containing exportButton if present, otherwise Optional.empty()
+     * @return Optional of exportButton
      */
     protected Optional<WebElement> getExportButton() {
-        return Optional.ofNullable(exportButton);
+        return Optional.ofNullable(this.exportButton);
     }
 }

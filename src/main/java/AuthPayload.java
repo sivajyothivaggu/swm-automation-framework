@@ -8,7 +8,7 @@ import org.slf4j.LoggerFactory;
 /**
  * Payload object representing authentication credentials.
  *
- * <p>This immutable-friendly class holds a username and password for authentication operations.
+ * <p>This class holds a username and password for authentication operations.
  * It performs validation to ensure values are non-null and non-blank and provides both
  * Optional-based accessors for safer null handling and traditional getters/setters for
  * backward compatibility.</p>
@@ -141,7 +141,7 @@ public class AuthPayload {
     }
 
     /**
-     * Standard equals implementation.
+     * Standard equals implementation comparing username and password.
      *
      * @param o other object
      * @return true if same username and password
@@ -159,7 +159,7 @@ public class AuthPayload {
     }
 
     /**
-     * Standard hashCode implementation.
+     * Hashcode implementation consistent with equals.
      *
      * @return hash code
      */
@@ -169,12 +169,12 @@ public class AuthPayload {
     }
 
     /**
-     * toString implementation that masks sensitive information.
+     * String representation for debugging. Does not include the raw password.
      *
-     * @return string representation with masked password
+     * @return string describing the payload with masked sensitive data
      */
     @Override
     public String toString() {
-        return "AuthPayload{username='" + maskForLogs(username) + "', password='" + maskForLogs(password) + "'}";
+        return "AuthPayload{" + "username='" + maskForLogs(username) + '\'' + ", password='****'" + '}';
     }
 }
