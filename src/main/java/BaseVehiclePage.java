@@ -114,10 +114,11 @@ public class BaseVehiclePage extends BasePage {
     }
 
     /**
-     * Clicks the export button to trigger data export.
+     * Clicks the export button to start export operation.
      *
      * @throws IllegalStateException if the export button element is not initialized
      * @throws RuntimeException      if a WebElement interaction error occurs
+     * @since 1.0
      */
     public void clickExport() {
         logger.debug("Attempting to click export button");
@@ -138,90 +139,91 @@ public class BaseVehiclePage extends BasePage {
     }
 
     /**
-     * Safely clicks a WebElement after verifying it is interactable. Logs detailed
-     * information and wraps common Selenium exceptions in a RuntimeException.
+     * Safely clicks a WebElement with robust error handling and logging.
      *
-     * @param element the WebElement to click; assumed non-null
-     * @param name    a friendly name for the element for logging purposes
-     * @throws RuntimeException if the element is not interactable or a Selenium exception occurs
+     * @param element     the WebElement to click; must not be null
+     * @param elementName friendly name for logging purposes
+     * @throws IllegalArgumentException if {@code element} is null
+     * @throws RuntimeException         if the click interaction fails
      */
-    protected void safeClick(WebElement element, String name) {
+    protected void safeClick(WebElement element, String elementName) {
         if (Objects.isNull(element)) {
-            logger.error("Attempted to click a null element: {}", name);
-            throw new IllegalArgumentException("Element to click must not be null: " + name);
+            logger.error("Attempted to safeClick a null element: {}", elementName);
+            throw new IllegalArgumentException("Element to click must not be null: " + elementName);
         }
-
         try {
             if (!element.isDisplayed() || !element.isEnabled()) {
-                logger.error("Element '{}' is not interactable (displayed={}, enabled={})",
-                        name, safeIsDisplayed(element), safeIsEnabled(element));
-                throw new ElementNotInteractableException("Element is not interactable: " + name);
+                String msg = String.format("%s is not interactable (displayed=%s, enabled=%s)",
+                        elementName, safeIsDisplayed(element), safeIsEnabled(element));
+                logger.error(msg);
+                throw new ElementNotInteractableException(msg);
             }
             element.click();
+            logger.debug("Clicked element: {}", elementName);
         } catch (NoSuchElementException | StaleElementReferenceException | ElementNotInteractableException e) {
-            logger.error("Failed to click {} due to WebElement issue: {}", name, e.getMessage(), e);
-            throw new RuntimeException("Failed to click " + name, e);
+            logger.error("Failed to click {}: {}", elementName, e.getMessage(), e);
+            throw new RuntimeException("Failed to click " + elementName, e);
         } catch (Exception e) {
-            logger.error("Unexpected error while clicking {}: {}", name, e.getMessage(), e);
-            throw new RuntimeException("Unexpected error while clicking " + name, e);
+            logger.error("Unexpected error while clicking {}: {}", elementName, e.getMessage(), e);
+            throw new RuntimeException("Unexpected error while clicking " + elementName, e);
         }
     }
 
     /**
-     * Returns an Optional-wrapped search box element.
+     * Returns an Optional wrapping the search box WebElement.
      *
-     * @return an Optional of the search box WebElement
+     * @return Optional of searchBox element
      */
     public Optional<WebElement> getSearchBox() {
         return Optional.ofNullable(searchBox);
     }
 
     /**
-     * Returns an Optional-wrapped filter button element.
+     * Returns an Optional wrapping the filter button WebElement.
      *
-     * @return an Optional of the filter button WebElement
+     * @return Optional of filterButton element
      */
     public Optional<WebElement> getFilterButton() {
         return Optional.ofNullable(filterButton);
     }
 
     /**
-     * Returns an Optional-wrapped export button element.
+     * Returns an Optional wrapping the export button WebElement.
      *
-     * @return an Optional of the export button WebElement
+     * @return Optional of exportButton element
      */
     public Optional<WebElement> getExportButton() {
         return Optional.ofNullable(exportButton);
     }
 
     /**
-     * Safely checks if an element is displayed. Any exceptions are caught and logged,
-     * returning false to indicate non-displayable state.
+     * Safely checks whether the element is displayed. Any exception during check will be logged and the method
+     * will return false.
      *
-     * @param element the WebElement to check
-     * @return true if displayed and accessible; false otherwise
+     * @param element element to check
+     * @return true if displayed and accessible, false otherwise
      */
     protected boolean safeIsDisplayed(WebElement element) {
         try {
             return element != null && element.isDisplayed();
         } catch (Exception e) {
-            logger.debug("safeIsDisplayed encountered an exception: {}", e.getMessage());
+            logger.debug("Ignored exception while checking isDisplayed: {}", e.getMessage(), e);
             return false;
         }
     }
 
     /**
-     * Safely checks if an element is enabled. Any exceptions are caught and logged,
-     * returning false to indicate non-enabled state.
+     * Safely checks whether the element is enabled. Any exception during check will be logged and the method
+     * will return false.
      *
-     * @param element the WebElement to check
-     * @return true if enabled and accessible; false otherwise
+     * @param element element to check
+     * @return true if enabled and accessible, false otherwise
      */
     protected boolean safeIsEnabled(WebElement element) {
         try {
             return element != null && element.isEnabled();
         } catch (Exception e) {
-            logger.debug("safeIsEnabled encountered an exception: {}", e.getMessage());
+            logger.debug("Ignored exception while checking isEnabled: {}", e.getMessage(), e);
             return false;
         }
     }

@@ -38,8 +38,8 @@ public class DBConnection extends BaseDB {
      *
      * @param query the SQL SELECT query to execute; must not be null
      * @return a disconnected ResultSet containing the query results
-     * @throws SQLException if a database access error occurs or the query is invalid
-     * @throws NullPointerException if query is null
+     * @throws SQLException           if a database access error occurs or the query is invalid
+     * @throws NullPointerException   if query is null
      */
     public ResultSet executeQuery(String query) throws SQLException {
         Objects.requireNonNull(query, "query must not be null");
@@ -83,7 +83,7 @@ public class DBConnection extends BaseDB {
      *
      * @param query the SQL update statement; must not be null
      * @return number of rows affected
-     * @throws SQLException if a database access error occurs
+     * @throws SQLException         if a database access error occurs
      * @throws NullPointerException if query is null
      */
     public int executeUpdate(String query) throws SQLException {
@@ -118,45 +118,90 @@ public class DBConnection extends BaseDB {
     }
 
     /**
-     * Converts a ResultSet into a List of Maps where each map represents a row with
-     * column-label-to-value mapping. This method does not close the provided ResultSet;
-     * callers should close it if necessary. If null is provided, an empty list is returned.
+     * Converts the provided ResultSet into a List of Maps, one map per row where
+     * the keys are column labels and the values are the column values.
      *
-     * @param resultSet the ResultSet to convert; may be null
-     * @return a List of Maps representing the rows; never null
-     * @throws SQLException if reading from the ResultSet fails
+     * The method will close the provided ResultSet when finished.
+     *
+     * @param resultSet the ResultSet to convert; must not be null
+     * @return non-null List of rows (may be empty if ResultSet has no rows)
+     * @throws SQLException           if an error occurs while reading the ResultSet
+     * @throws NullPointerException   if resultSet is null
      */
     public List<Map<String, Object>> getResultList(ResultSet resultSet) throws SQLException {
-        if (Objects.isNull(resultSet)) {
-            logger.debug("getResultList called with null ResultSet; returning empty list.");
-            return new ArrayList<>();
-        }
+        Objects.requireNonNull(resultSet, "resultSet must not be null");
+        logger.debug("Converting ResultSet to List<Map<String,Object>>");
 
         List<Map<String, Object>> rows = new ArrayList<>();
-        try {
-            ResultSetMetaData metaData = resultSet.getMetaData();
+
+        // Use try-with-resources to ensure the ResultSet is closed.
+        try (ResultSet rs = resultSet) {
+            ResultSetMetaData metaData = rs.getMetaData();
             int columnCount = metaData.getColumnCount();
 
-            while (resultSet.next()) {
-                Map<String, Object> row = new HashMap<>(columnCount);
-                for (int col = 1; col <= columnCount; col++) {
-                    String columnLabel = metaData.getColumnLabel(col);
+            while (rs.next()) {
+                Map<String, Object> row = new HashMap<>();
+                for (int i = 1; i <= columnCount; i++) {
+                    String columnLabel = metaData.getColumnLabel(i);
                     if (columnLabel == null || columnLabel.isEmpty()) {
-                        columnLabel = metaData.getColumnName(col);
+                        columnLabel = metaData.getColumnName(i);
                     }
-                    Object value = resultSet.getObject(col);
+                    Object value = rs.getObject(i);
                     row.put(columnLabel, value);
                 }
                 rows.add(row);
             }
-            logger.debug("Converted ResultSet to list of {} rows.", rows.size());
-            return rows;
+            logger.debug("Converted ResultSet to list with {} rows.", rows.size());
         } catch (SQLException sqle) {
             logger.error("SQLException while converting ResultSet to list: {}", sqle.getMessage(), sqle);
             throw sqle;
         } catch (Exception e) {
             logger.error("Unexpected exception while converting ResultSet to list: {}", e.getMessage(), e);
             throw new SQLException("Unexpected error converting ResultSet to list", e);
+        }
+
+        return rows;
+    }
+
+    /**
+     * Utility to fetch a single row from a ResultSet as a Map. If the ResultSet has
+     * no rows, an empty Map is returned. The ResultSet will be closed by this method.
+     *
+     * @param resultSet the ResultSet to read; must not be null
+     * @return non-null Map representing the first row; empty if no rows
+     * @throws SQLException         if an error occurs reading the ResultSet
+     * @throws NullPointerException if resultSet is null
+     */
+    public Map<String, Object> getSingleResult(ResultSet resultSet) throws SQLException {
+        Objects.requireNonNull(resultSet, "resultSet must not be null");
+        logger.debug("Converting ResultSet to single Map<String,Object>");
+
+        try (ResultSet rs = resultSet) {
+            ResultSetMetaData metaData = rs.getMetaData();
+            int columnCount = metaData.getColumnCount();
+
+            if (rs.next()) {
+                Map<String, Object> row = new HashMap<>();
+                for (int i = 1; i <= columnCount; i++) {
+                    String columnLabel = metaData.getColumnLabel(i);
+                    if (columnLabel == null || columnLabel.isEmpty()) {
+                        columnLabel = metaData.getColumnName(i);
+                    }
+                    Object value = rs.getObject(i);
+                    row.put(columnLabel, value);
+                }
+                logger.debug("Converted ResultSet to single row map.");
+                return row;
+            } else {
+                logger.debug("ResultSet contained no rows; returning empty map.");
+                return new HashMap<>();
+            }
+        } catch (SQLException sqle) {
+            logger.error("SQLException while converting ResultSet to single map: {}", sqle.getMessage(), sqle);
+            throw sqle;
+        } catch (Exception e) {
+            logger.error("Unexpected exception while converting ResultSet to single map: {}", e.getMessage(), e);
+            throw new SQLException("Unexpected error converting ResultSet to single map", e);
         }
     }
 }

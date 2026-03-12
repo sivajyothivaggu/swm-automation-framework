@@ -19,7 +19,7 @@ import java.util.Optional;
  * </p>
  *
  * <p>
- * Usage:
+ * Usage example:
  * AuthEndpoints endpoints = new AuthEndpoints();
  * Response resp = endpoints.login(payload);
  * Optional<Response> maybeResp = endpoints.loginOptional(payload);
@@ -128,7 +128,6 @@ public class AuthEndpoints extends BaseAPI {
     public Response logout() {
         try {
             LOGGER.debug("logout called");
-
             final Response response = client.post(LOGOUT_ENDPOINT, null, getRequestSpec());
             if (Objects.isNull(response)) {
                 LOGGER.warn("Received null Response from POST {}", LOGOUT_ENDPOINT);

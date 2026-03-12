@@ -18,7 +18,7 @@ import org.slf4j.LoggerFactory;
  *
  * <p>Usage example:
  * EnvironmentConfig cfg = new EnvironmentConfig("dev");
- * Optional<String> url = cfg.getUrl();
+ * Optional&lt;String&gt; url = cfg.getUrl();
  * </p>
  */
 public final class EnvironmentConfig {
@@ -60,11 +60,11 @@ public final class EnvironmentConfig {
         String tmpDbPassword = null;
 
         try {
-            // Instantiate reader - this may throw; let it bubble as Exception caught below
+            // Instantiate reader - this may throw; exceptions handled below
             reader = new PropertyReader(fileName);
 
             // If PropertyReader implements AutoCloseable we use try-with-resources to ensure it is closed.
-            // If not, the resource will be null and nothing will be closed here; the finally block will attempt a reflective close.
+            // If not, the resource variable will be null and finally block will attempt a reflective close.
             try (AutoCloseable ignored = (reader instanceof AutoCloseable) ? (AutoCloseable) reader : null) {
                 tmpUrl = safeTrim(reader.getProperty(PROP_APP_URL));
                 tmpApiUrl = safeTrim(reader.getProperty(PROP_API_URL));
@@ -95,115 +95,62 @@ public final class EnvironmentConfig {
             throw new IllegalStateException("Failed to load environment properties from " + fileName, e);
         } finally {
             // If reader existed but did not implement AutoCloseable, attempt to close via reflection if a close method exists.
-            if (reader != null && !(reader instanceof AutoCloseable)) {
+            if (!Objects.isNull(reader) && !(reader instanceof AutoCloseable)) {
                 try {
                     Method closeMethod = reader.getClass().getMethod("close");
-                    if (closeMethod != null) {
+                    if (!Objects.isNull(closeMethod)) {
                         closeMethod.setAccessible(true);
                         closeMethod.invoke(reader);
+                        LOGGER.debug("Closed PropertyReader for {}", fileName);
                     }
                 } catch (NoSuchMethodException nsme) {
                     // No close method available - nothing to do.
-                    LOGGER.debug("PropertyReader for {} does not implement AutoCloseable and has no close() method", fileName);
-                } catch (InvocationTargetException ite) {
-                    LOGGER.warn("Close method of PropertyReader for {} threw an exception: {}", fileName, ite.getTargetException().getMessage(), ite.getTargetException());
-                } catch (IllegalAccessException iae) {
-                    LOGGER.warn("Unable to access close method of PropertyReader for {}: {}", fileName, iae.getMessage(), iae);
-                } catch (Exception e) {
-                    LOGGER.warn("Unexpected error while closing PropertyReader for {}: {}", fileName, e.getMessage(), e);
+                    LOGGER.debug("PropertyReader for {} does not declare a close() method", fileName);
+                } catch (IllegalAccessException | InvocationTargetException iae) {
+                    LOGGER.warn("Failed to invoke close() on PropertyReader for {}: {}", fileName, iae.getMessage(), iae);
+                } catch (Exception ex) {
+                    LOGGER.warn("Unexpected exception while closing PropertyReader for {}: {}", fileName, ex.getMessage(), ex);
                 }
             }
         }
 
-        // Assign to final fields (preserve values even if null)
         this.url = tmpUrl;
         this.apiUrl = tmpApiUrl;
         this.dbUrl = tmpDbUrl;
         this.dbUser = tmpDbUser;
         this.dbPassword = tmpDbPassword;
 
-        LOGGER.info("EnvironmentConfig initialized for '{}' (app.url present={}, api.url present={})",
-                fileName,
-                this.url != null,
-                this.apiUrl != null);
+        LOGGER.info("EnvironmentConfig initialized for env='{}' (properties file: {})", env, fileName);
     }
 
     /**
-     * Return application URL if present.
+     * Safely trims a string. Returns null if input is null or empty after trimming.
      *
-     * @return Optional containing app URL or empty if not present
+     * @param value input string
+     * @return trimmed string or null
      */
-    public Optional<String> getUrl() {
-        return Optional.ofNullable(url);
-    }
-
-    /**
-     * Return API URL if present.
-     *
-     * @return Optional containing API URL or empty if not present
-     */
-    public Optional<String> getApiUrl() {
-        return Optional.ofNullable(apiUrl);
-    }
-
-    /**
-     * Return database URL if present.
-     *
-     * @return Optional containing DB URL or empty if not present
-     */
-    public Optional<String> getDbUrl() {
-        return Optional.ofNullable(dbUrl);
-    }
-
-    /**
-     * Return database username if present.
-     *
-     * @return Optional containing DB username or empty if not present
-     */
-    public Optional<String> getDbUser() {
-        return Optional.ofNullable(dbUser);
-    }
-
-    /**
-     * Return database password if present.
-     *
-     * WARNING: callers should treat this value sensitively. Prefer using getMaskedDbPassword()
-     * for logging or diagnostic output.
-     *
-     * @return Optional containing DB password or empty if not present
-     */
-    public Optional<String> getDbPassword() {
-        return Optional.ofNullable(dbPassword);
-    }
-
-    /**
-     * Return a masked representation of the DB password suitable for logs/diagnostics.
-     *
-     * @return Optional containing masked DB password or empty if not present
-     */
-    public Optional<String> getMaskedDbPassword() {
-        return Optional.ofNullable(maskValue(dbPassword));
-    }
-
-    /**
-     * Mask a sensitive value for safe logging. Preserves up to first and last character(s)
-     * and replaces middle characters with asterisks. If the input is null, returns null.
-     *
-     * @param value input value that may be sensitive
-     * @return masked value or null if input was null
-     */
-    private static String maskValue(String value) {
+    private static String safeTrim(String value) {
         if (Objects.isNull(value)) {
             return null;
         }
-        final int len = value.length();
-        if (len <= 2) {
-            return "*".repeat(len);
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    /**
+     * Mask a value for safe logging (keeps first and last character when possible).
+     *
+     * @param value original value
+     * @return masked representation
+     */
+    private static String maskValue(String value) {
+        if (Objects.isNull(value) || value.length() <= 2) {
+            return "<masked>";
         }
-        int numStars = Math.max(1, len - 2);
+        int len = value.length();
         StringBuilder sb = new StringBuilder();
         sb.append(value.charAt(0));
-        for (int i = 0; i < numStars; i++) {
+        for (int i = 1; i < len - 1; i++) {
             sb.append('*');
         }
         sb.append(value.charAt(len - 1));
@@ -211,27 +158,53 @@ public final class EnvironmentConfig {
     }
 
     /**
-     * Safely trim a string, returning null if the input is null or consists only of whitespace.
-     *
-     * @param s input string
-     * @return trimmed string or null
+     * @return Optional containing the application URL if present.
      */
-    private static String safeTrim(String s) {
-        if (Objects.isNull(s)) {
-            return null;
-        }
-        String t = s.trim();
-        return t.isEmpty() ? null : t;
+    public Optional<String> getUrl() {
+        return Optional.ofNullable(this.url);
     }
 
+    /**
+     * @return Optional containing the API URL if present.
+     */
+    public Optional<String> getApiUrl() {
+        return Optional.ofNullable(this.apiUrl);
+    }
+
+    /**
+     * @return Optional containing the database URL if present.
+     */
+    public Optional<String> getDbUrl() {
+        return Optional.ofNullable(this.dbUrl);
+    }
+
+    /**
+     * @return Optional containing the database user if present.
+     */
+    public Optional<String> getDbUser() {
+        return Optional.ofNullable(this.dbUser);
+    }
+
+    /**
+     * @return Optional containing the database password if present.
+     */
+    public Optional<String> getDbPassword() {
+        return Optional.ofNullable(this.dbPassword);
+    }
+
+    /**
+     * Returns a safe string representation for logging or debugging. Sensitive fields are masked.
+     *
+     * @return string representation with masked sensitive values
+     */
     @Override
     public String toString() {
         return "EnvironmentConfig{" +
-                "url=" + (url == null ? "<null>" : url) +
-                ", apiUrl=" + (apiUrl == null ? "<null>" : apiUrl) +
-                ", dbUrl=" + (dbUrl == null ? "<null>" : dbUrl) +
-                ", dbUser=" + (dbUser == null ? "<null>" : dbUser) +
-                ", dbPassword=" + (dbPassword == null ? "<null>" : maskValue(dbPassword)) +
+                "url='" + this.url + '\'' +
+                ", apiUrl='" + this.apiUrl + '\'' +
+                ", dbUrl='" + this.dbUrl + '\'' +
+                ", dbUser='" + (Objects.isNull(this.dbUser) ? "<null>" : maskValue(this.dbUser)) + '\'' +
+                ", dbPassword='" + (Objects.isNull(this.dbPassword) ? "<null>" : "<masked>") + '\'' +
                 '}';
     }
 }
