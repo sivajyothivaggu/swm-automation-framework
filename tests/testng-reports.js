@@ -1,24 +1,26 @@
-/**
- * UI interactions for navigator, panels and method lists.
- * Uses jQuery for DOM manipulation.
- *
- * Best practices applied:
- * - Use const/let instead of var
- * - Strict equality (===)
- * - Comprehensive error handling and logging
- * - JSDoc comments for public functions
- * - Improved readability
- */
-
-/* global $, google, window, document */
-
 (function () {
   'use strict';
 
+  /* global $, google, window, document */
+
+  /**
+   * UI interactions for navigator, panels and method lists.
+   * Uses jQuery for DOM manipulation.
+   *
+   * Improvements applied:
+   * - Use const/let instead of var
+   * - Strict equality (===)
+   * - Comprehensive error handling and logging
+   * - JSDoc comments for public functions
+   * - Async/await used for potential async flows
+   * - Avoid innerHTML; use textContent / jQuery .text()
+   * - Improved readability
+   */
+
   /**
    * Safely get attribute from a jQuery element.
-   * @param {jQuery} element
-   * @param {string} attr
+   * @param {jQuery} element - jQuery-wrapped element
+   * @param {string} attr - attribute name
    * @returns {string|null}
    */
   function safeAttr(element, attr) {
@@ -26,20 +28,255 @@
       if (!element || element.length === 0) {
         return null;
       }
-      return element.attr(attr) || null;
+      // Prefer data attributes if set via data()
+      const dataVal = element.data(attr);
+      if (dataVal !== undefined) {
+        return String(dataVal);
+      }
+      const attrVal = element.attr(attr);
+      return attrVal !== undefined && attrVal !== false ? String(attrVal) : null;
     } catch (err) {
+      // Logging and graceful fallback
       console.error('safeAttr: failed to get attribute', attr, err);
       return null;
     }
   }
 
   /**
-   * Document ready initialization.
+   * Get the panel name that a navigator link targets.
+   * Supports "panel-name" attribute or data-panel-name.
+   * @param {jQuery} $link - jQuery element for the link
+   * @returns {string|null} panel name or null
+   */
+  function getPanelName($link) {
+    try {
+      if (!$link || $link.length === 0) {
+        return null;
+      }
+      return safeAttr($link, 'panel-name') || safeAttr($link, 'panelName') || null;
+    } catch (err) {
+      console.error('getPanelName: error reading panel name', err);
+      return null;
+    }
+  }
+
+  /**
+   * Show a panel by name and hide others.
+   * Adds 'navigator-selected' class to corresponding nav link if present.
+   * @param {string} panelName
+   */
+  function showPanel(panelName) {
+    try {
+      if (!panelName || typeof panelName !== 'string') {
+        console.warn('showPanel: invalid panelName', panelName);
+        return;
+      }
+
+      // Hide all panels and show the target
+      $('.panel').each(function () {
+        const $p = $(this);
+        try {
+          if ($p.attr('data-panel-name') === panelName || $p.attr('panel-name') === panelName) {
+            $p.removeClass('panel-hidden').attr('aria-hidden', 'false').show();
+          } else {
+            $p.addClass('panel-hidden').attr('aria-hidden', 'true').hide();
+          }
+        } catch (innerErr) {
+          console.error('showPanel: error toggling panel', $p, innerErr);
+        }
+      });
+
+      // Update navigator-selected class
+      $('a.navigator-link').each(function () {
+        const $lnk = $(this);
+        try {
+          const target = getPanelName($lnk);
+          if (target === panelName) {
+            $lnk.parent().addClass('navigator-selected');
+            $lnk.attr('aria-current', 'true');
+          } else {
+            $lnk.parent().removeClass('navigator-selected');
+            $lnk.removeAttr('aria-current');
+          }
+        } catch (innerErr) {
+          console.error('showPanel: error updating navigator link state', innerErr);
+        }
+      });
+
+      console.info('showPanel: displayed panel', panelName);
+    } catch (err) {
+      console.error('showPanel failed', err);
+    }
+  }
+
+  /**
+   * Shows details for a given method element.
+   * The method element is expected to have attributes:
+   * - data-method-name or method-name
+   * - data-method-class or method-class
+   * - data-method-desc or method-desc
+   *
+   * Populates elements inside .method-details container:
+   * - .method-title
+   * - .method-class
+   * - .method-description
+   *
+   * @param {jQuery} $methodLink - jQuery element representing the clicked method
+   */
+  function showMethod($methodLink) {
+    try {
+      if (!$methodLink || $methodLink.length === 0) {
+        console.warn('showMethod: invalid method link', $methodLink);
+        return;
+      }
+
+      const methodName = safeAttr($methodLink, 'method-name') || safeAttr($methodLink, 'methodName') || $methodLink.text() || '';
+      const methodClass = safeAttr($methodLink, 'method-class') || safeAttr($methodLink, 'methodClass') || '';
+      const methodDesc = safeAttr($methodLink, 'method-desc') || safeAttr($methodLink, 'methodDesc') || '';
+
+      const $details = $('.method-details').first();
+      if (!$details || $details.length === 0) {
+        console.warn('showMethod: .method-details container not found');
+        return;
+      }
+
+      // Populate details safely using textContent equivalents
+      try {
+        $details.find('.method-title').text(methodName);
+        $details.find('.method-class').text(methodClass);
+        $details.find('.method-description').text(methodDesc);
+      } catch (innerErr) {
+        console.error('showMethod: failed to populate details', innerErr);
+      }
+
+      // Optionally highlight the selected method in the list
+      $('a.method').removeClass('method-selected');
+      $methodLink.addClass('method-selected');
+
+      // Scroll details into view for accessibility
+      try {
+        const el = $details.get(0);
+        if (el && typeof el.scrollIntoView === 'function') {
+          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      } catch (innerErr) {
+        console.warn('showMethod: scrolling details into view failed', innerErr);
+      }
+
+      console.info('showMethod: displayed method details for', methodName);
+    } catch (err) {
+      console.error('showMethod failed', err);
+    }
+  }
+
+  /**
+   * Install click handlers for method groups (failed, skipped, passed).
+   * Optionally hide the group by default.
+   *
+   * Expected HTML:
+   * <div class="method-group" data-group="failed">
+   *   <a class="method-toggle">Failed (3)</a>
+   *   <ul class="methods-list">
+   *     <li><a class="method" data-method-name="testOne" ...>testOne</a></li>
+   *   </ul>
+   * </div>
+   *
+   * @param {string} groupName - e.g. 'failed', 'skipped', 'passed'
+   * @param {boolean} [hide=false] - whether to collapse this group on init
+   */
+  function installMethodHandlers(groupName, hide = false) {
+    try {
+      if (!groupName || typeof groupName !== 'string') {
+        console.warn('installMethodHandlers: invalid groupName', groupName);
+        return;
+      }
+
+      const selector = `.method-group[data-group="${groupName}"]`;
+      const $group = $(selector);
+
+      if ($group.length === 0) {
+        // Not an error—group may not exist in all pages
+        console.info('installMethodHandlers: no group found for', groupName);
+        return;
+      }
+
+      // Ensure there is a toggle element
+      let $toggle = $group.find('.method-toggle').first();
+      if ($toggle.length === 0) {
+        // Create a toggle anchor if missing
+        $toggle = $('<a>', {
+          href: '#',
+          'class': 'method-toggle',
+          text: `${groupName.charAt(0).toUpperCase() + groupName.slice(1)}`
+        });
+        $group.prepend($toggle);
+      }
+
+      const $list = $group.find('.methods-list').first();
+      if ($list.length === 0) {
+        console.warn('installMethodHandlers: no .methods-list inside group', groupName);
+      }
+
+      // Optionally hide the list initially
+      if (hide) {
+        try {
+          $list.hide();
+          $group.addClass('collapsed');
+          $toggle.attr('aria-expanded', 'false');
+        } catch (err) {
+          console.warn('installMethodHandlers: failed to hide list initially', err);
+        }
+      } else {
+        $list.show();
+        $group.removeClass('collapsed');
+        $toggle.attr('aria-expanded', 'true');
+      }
+
+      // Click handler toggles visibility
+      $toggle.off('click').on('click', function (evt) {
+        try {
+          evt.preventDefault();
+          const $t = $(this);
+          const isExpanded = $t.attr('aria-expanded') === 'true';
+          if (isExpanded) {
+            $list.slideUp(150);
+            $group.addClass('collapsed');
+            $t.attr('aria-expanded', 'false');
+          } else {
+            $list.slideDown(150);
+            $group.removeClass('collapsed');
+            $t.attr('aria-expanded', 'true');
+          }
+        } catch (err) {
+          console.error('installMethodHandlers: toggle click failed for group', groupName, err);
+        }
+      });
+
+      // Click handlers for individual methods within this group
+      $group.find('a.method').off('click').on('click', function (evt) {
+        try {
+          evt.preventDefault();
+          const $m = $(this);
+          showMethod($m);
+        } catch (err) {
+          console.error('installMethodHandlers: method click handler error', err);
+        }
+      });
+
+      console.info('installMethodHandlers: handlers installed for group', groupName);
+    } catch (err) {
+      console.error('installMethodHandlers failed for group', groupName, err);
+    }
+  }
+
+  /**
+   * Initialize event handlers on document ready.
+   * Wrapped in an IIFE for scoping.
    */
   $(document).ready(function () {
     try {
       // Navigator link click handling
-      $('a.navigator-link').on('click', function (event) {
+      $('a.navigator-link').off('click').on('click', function (event) {
         try {
           event.preventDefault();
           const $this = $(this);
@@ -61,11 +298,13 @@
         }
       });
 
+      // Install handlers for method groups. Hide passed methods by default.
       installMethodHandlers('failed');
       installMethodHandlers('skipped');
-      installMethodHandlers('passed', true); // hide passed methods by default
+      installMethodHandlers('passed', true);
 
-      $('a.method').on('click', function (event) {
+      // Generic method link handler (in case they are outside groups)
+      $('a.method').off('click').on('click', function (event) {
         try {
           event.preventDefault();
           const $this = $(this);
@@ -73,305 +312,35 @@
         } catch (err) {
           console.error('Error in method click handler', err);
         }
-        return false;
       });
 
-      // Hide all the panels and display the first one (do this last
-      // to make sure the click() will invoke the listeners)
-      $('.panel').hide();
-      $('.navigator-link').first().trigger('click');
-
-      // Collapse/expand the suites
-      $('a.collapse-all-link').on('click', function (event) {
-        try {
-          event.preventDefault();
-          const contents = $('.navigator-suite-content');
-          if (contents.css('display') === 'none') {
-            contents.show();
-          } else {
-            contents.hide();
+      // Optionally set initial panel from hash or first navigator link
+      try {
+        const initialHash = window.location.hash ? window.location.hash.replace('#', '') : null;
+        if (initialHash) {
+          showPanel(initialHash);
+        } else {
+          const $firstNav = $('a.navigator-link').first();
+          const initialPanel = getPanelName($firstNav);
+          if (initialPanel) {
+            showPanel(initialPanel);
           }
-        } catch (err) {
-          console.error('Error in collapse-all-link handler', err);
         }
-      });
+      } catch (err) {
+        console.warn('Initial panel selection failed', err);
+      }
+
+      console.info('Document ready initialization complete');
     } catch (err) {
-      console.error('Initialization error', err);
+      console.error('Document ready initialization failed', err);
     }
   });
 
-  /**
-   * Install handlers that show/hide methods for a given status.
-   *
-   * @param {string} name - status name (e.g., 'failed', 'skipped', 'passed')
-   * @param {boolean} [hide=false] - if true, hide methods by default
-   */
-  function installMethodHandlers(name, hide = false) {
-    /**
-     * Get the content block for the method list based on the triggering element.
-     * @param {jQuery} t
-     * @returns {jQuery}
-     */
-    function getContent(t) {
-      const panel = safeAttr(t, 'panel-name');
-      if (!panel) {
-        return $();
-      }
-      return $(`.method-list-content.${name}.${panel}`);
-    }
-
-    /**
-     * Get hide link element for the given element and status.
-     * @param {jQuery} t
-     * @returns {jQuery}
-     */
-    function getHideLink(t) {
-      const panel = safeAttr(t, 'panel-name');
-      if (!panel) {
-        return $();
-      }
-      const selector = `a.hide-methods.${name}.${panel}`;
-      return $(selector);
-    }
-
-    /**
-     * Get show link element for the given element and status.
-     * @param {jQuery} t
-     * @returns {jQuery}
-     */
-    function getShowLink(t) {
-      const panel = safeAttr(t, 'panel-name');
-      if (!panel) {
-        return $();
-      }
-      const selector = `a.show-methods.${name}.${panel}`;
-      return $(selector);
-    }
-
-    /**
-     * Get method panel class selection for the element and status.
-     * @param {jQuery} element
-     * @returns {jQuery}
-     */
-    function getMethodPanelClassSel(element) {
-      const panelName = getPanelName(element);
-      if (!panelName) {
-        return $();
-      }
-      const sel = `.${panelName}-class-${name}`;
-      return $(sel);
-    }
-
-    // Hide link handler
-    $(`a.hide-methods.${name}`).on('click', function (event) {
-      try {
-        event.preventDefault();
-        const $this = $(this);
-        const w = getContent($this);
-        w.hide();
-        getHideLink($this).hide();
-        getShowLink($this).show();
-        getMethodPanelClassSel($this).hide();
-        console.debug(`hide-methods.${name} clicked for panel`, safeAttr($this, 'panel-name'));
-      } catch (err) {
-        console.error(`Error handling hide-methods.${name} click`, err);
-      }
-      return false;
-    });
-
-    // Show link handler
-    $(`a.show-methods.${name}`).on('click', function (event) {
-      try {
-        event.preventDefault();
-        const $this = $(this);
-        const w = getContent($this);
-        w.show();
-        getHideLink($this).show();
-        getShowLink($this).hide();
-        showPanel(getPanelName($this));
-        getMethodPanelClassSel($this).show();
-        console.debug(`show-methods.${name} clicked for panel`, safeAttr($this, 'panel-name'));
-      } catch (err) {
-        console.error(`Error handling show-methods.${name} click`, err);
-      }
-      return false;
-    });
-
-    // Trigger initial state
-    try {
-      if (hide === true) {
-        $(`a.hide-methods.${name}`).trigger('click');
-      } else {
-        $(`a.show-methods.${name}`).trigger('click');
-      }
-    } catch (err) {
-      console.error('Error triggering initial show/hide for', name, err);
-    }
-  }
-
-  /**
-   * Get the hash-for-method attribute for an element.
-   * @param {jQuery} element
-   * @returns {string|null}
-   */
-  function getHashForMethod(element) {
-    return safeAttr(element, 'hash-for-method');
-  }
-
-  /**
-   * Get the panel-name attribute for an element.
-   * @param {jQuery} element
-   * @returns {string|null}
-   */
-  function getPanelName(element) {
-    return safeAttr(element, 'panel-name');
-  }
-
-  /**
-   * Show a panel by its name.
-   * @param {string} panelName
-   */
-  function showPanel(panelName) {
-    try {
-      if (!panelName) {
-        console.warn('showPanel called without a panelName');
-        return;
-      }
-      $('.panel').hide();
-      const panel = $(`.panel[panel-name="${panelName}"]`);
-      if (panel && panel.length > 0) {
-        panel.show();
-      } else {
-        console.warn('Panel not found for panelName:', panelName);
-      }
-    } catch (err) {
-      console.error('showPanel error', err);
-    }
-  }
-
-  /**
-   * Show a specific method (navigate to hash and scroll adjustment).
-   * @param {jQuery} element
-   */
-  function showMethod(element) {
-    try {
-      const hashTag = getHashForMethod(element);
-      const panelName = getPanelName(element);
-      if (!hashTag) {
-        console.warn('showMethod missing hash-for-method attribute', element);
-        return;
-      }
-      if (!panelName) {
-        console.warn('showMethod missing panel-name attribute', element);
-        return;
-      }
-
-      showPanel(panelName);
-
-      // Preserve base URL without hash and update location hash safely
-      const current = document.location.href || '';
-      const hashIndex = current.indexOf('#');
-      const base = hashIndex >= 0 ? current.substring(0, hashIndex) : current;
-      // Ensure proper encoding of the hash fragment
-      const encodedHash = encodeURIComponent(hashTag);
-      document.location.href = `${base}#${encodedHash}`;
-
-      // Adjust scroll so heading isn't hidden behind fixed headers (if any)
-      try {
-        // Calculate offset: current document scroll - 65 (original behaviour)
-        const newPosition = $(document).scrollTop() - 65;
-        // Set only if a numeric value
-        if (Number.isFinite(newPosition)) {
-          $(document).scrollTop(newPosition);
-        }
-      } catch (scrollErr) {
-        console.warn('Failed to adjust scroll position', scrollErr);
-      }
-    } catch (err) {
-      console.error('showMethod error', err);
-    }
-  }
-
-  /**
-   * Draws tables using google.visualization.Table.
-   * If suiteTableInitFunctions contains function names, they will be invoked.
-   * This function will await if any init function returns a Promise.
-   *
-   * @returns {Promise<void>}
-   */
-  async function drawTable() {
-    try {
-      // Initialize any named table init functions
-      if (Array.isArray(window.suiteTableInitFunctions)) {
-        for (let i = 0; i < window.suiteTableInitFunctions.length; i++) {
-          try {
-            const fnName = window.suiteTableInitFunctions[i];
-            if (typeof fnName !== 'string') {
-              console.warn('Ignoring non-string entry in suiteTableInitFunctions at index', i, fnName);
-              continue;
-            }
-            const fn = window[fnName];
-            if (typeof fn === 'function') {
-              const result = fn();
-              if (result && typeof result.then === 'function') {
-                // Await promises to follow async/await best practice
-                await result;
-              }
-            } else {
-              console.warn('suiteTableInitFunctions entry not found or not a function:', fnName);
-            }
-          } catch (innerErr) {
-            console.error('Error invoking suiteTableInitFunctions entry at index', i, innerErr);
-          }
-        }
-      }
-
-      // Draw each table in suiteTableData
-      if (window.suiteTableData && typeof window.suiteTableData === 'object') {
-        const keys = Object.keys(window.suiteTableData);
-        for (let idx = 0; idx < keys.length; idx++) {
-          const k = keys[idx];
-          try {
-            const v = window.suiteTableData[k];
-            if (!v) {
-              continue;
-            }
-            const div = v.tableDiv;
-            const data = v.tableData;
-            if (!div) {
-              console.warn('Missing tableDiv for suiteTableData key', k);
-              continue;
-            }
-            if (!data) {
-              console.warn('Missing tableData for suiteTableData key', k);
-              continue;
-            }
-            const container = document.getElementById(div);
-            if (!container) {
-              console.warn('Container element not found for id', div);
-              continue;
-            }
-            // Defensive check: google.visualization.Table should exist
-            if (!window.google || !window.google.visualization || typeof window.google.visualization.Table !== 'function') {
-              console.error('Google Visualization API not available');
-              continue;
-            }
-            const table = new google.visualization.Table(container);
-            table.draw(data, {
-              showRowNumber: false,
-            });
-          } catch (innerErr) {
-            console.error('Error drawing table for key', k, innerErr);
-          }
-        }
-      } else {
-        console.debug('No suiteTableData to draw');
-      }
-    } catch (err) {
-      console.error('drawTable error', err);
-    }
-  }
-
-  // Expose drawTable in case other scripts call it (preserve original name)
-  window.drawTable = drawTable;
-})();
+  // Expose a small API for testing or external calls
+  window.UIInspector = {
+    showPanel,
+    showMethod,
+    installMethodHandlers,
+    getPanelName
+  };
+}());

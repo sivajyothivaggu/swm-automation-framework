@@ -48,190 +48,258 @@ public class DreamsStatsValidation {
     private static final Optional<Integer> EXPECTED_TOTAL_COUNT = Optional.empty();
     private static final Optional<Integer> EXPECTED_RECURRING_COUNT = Optional.empty();
 
+    // Default URL of the dreams diary application under test.
+    private static final String DREAMS_URL = "http://qa.wingify.com/dreams";
+
+    // CSS locators (can be adjusted to match the actual page under test)
+    private static final String TABLE_SELECTOR = "table#dreamsTable";
+    private static final String TABLE_ROWS_SELECTOR = TABLE_SELECTOR + " tbody tr";
+
     /**
-     * Entry point. Launches a ChromeDriver, navigates to the dreams diary page,
-     * reads the table and computes statistics, then validates them.
+     * Main entry point to run the validation.
      *
      * @param args command-line arguments (not used)
      */
     public static void main(String[] args) {
-        WebDriver driver = null;
-        final String url = "https://arjitnigam.github.io/myDreams/dreams-diary.html";
+        LOGGER.info("Starting DreamsStatsValidation");
+
+        // Setup the driver binary; safe to call even if already configured.
+        WebDriverManager.chromedriver().setup();
+
+        // Use try-with-resources to ensure driver is closed.
+        // ChromeDriver implements AutoCloseable in recent selenium versions.
+        try (ChromeDriver driver = new ChromeDriver()) {
+            runValidation(driver, DREAMS_URL);
+        } catch (Exception e) {
+            LOGGER.log(Level.SEVERE, "Fatal error while running validation", e);
+        }
+
+        LOGGER.info("DreamsStatsValidation finished");
+    }
+
+    /**
+     * Runs the full validation flow: opens the URL, reads and computes statistics and validates
+     * against expected values if present.
+     *
+     * @param driver the WebDriver instance to use
+     * @param url    the URL of the dreams diary
+     */
+    public static void runValidation(WebDriver driver, String url) {
+        Objects.requireNonNull(driver, "WebDriver must not be null");
+        if (Objects.isNull(url) || url.trim().isEmpty()) {
+            throw new IllegalArgumentException("URL must not be null or empty");
+        }
 
         try {
-            LOGGER.info("Setting up Chrome WebDriver");
-            WebDriverManager.chromedriver().setup();
-
-            driver = new ChromeDriver();
-            driver.manage().window().maximize();
-            LOGGER.info("Navigating to: " + url);
+            driver.manage().timeouts().implicitlyWait(Duration.ofSeconds(2));
             driver.get(url);
+            LOGGER.info(() -> "Navigated to " + url);
 
-            WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
-
-            List<WebElement> rows;
-            try {
-                rows = wait.until(ExpectedConditions.visibilityOfAllElementsLocatedBy(By.xpath("//tbody/tr")));
-            } catch (TimeoutException te) {
-                LOGGER.log(Level.SEVERE, "Timed out waiting for table rows to be visible", te);
-                return;
-            } catch (Exception e) {
-                LOGGER.log(Level.SEVERE, "Unexpected error while waiting for table rows", e);
+            Optional<List<WebElement>> maybeRows = findTableRows(driver, Duration.ofSeconds(10));
+            if (maybeRows.isEmpty()) {
+                LOGGER.severe("Could not find dreams table or table has no rows. Aborting validation.");
                 return;
             }
 
-            if (Objects.isNull(rows)) {
-                LOGGER.warning("No rows found on the page");
-                rows = new ArrayList<>();
-            }
+            List<WebElement> rows = maybeRows.get();
+            Stats stats = computeStats(rows);
 
-            // Counters for dream types
-            int goodCount = 0;
-            int badCount = 0;
-            int recurringCount = 0;
+            LOGGER.info(() -> "Computed stats: " + stats.toString());
 
-            // Frequency map for dreams
-            Map<String, Integer> dreamFrequency = new HashMap<>();
+            validateIfExpected("Good", EXPECTED_GOOD_COUNT, stats.getGoodCount());
+            validateIfExpected("Bad", EXPECTED_BAD_COUNT, stats.getBadCount());
+            validateIfExpected("Total", EXPECTED_TOTAL_COUNT, stats.getTotalCount());
+            validateIfExpected("Recurring", EXPECTED_RECURRING_COUNT, stats.getRecurringCount());
 
-            // List of dreams considered recurring
-            List<String> recurringDreamNames = new ArrayList<>();
-            recurringDreamNames.add("Flying over mountains");
-            recurringDreamNames.add("Lost in maze");
-
-            LOGGER.info("Processing " + rows.size() + " row(s)");
-            for (WebElement row : rows) {
-                if (Objects.isNull(row)) {
-                    LOGGER.fine("Encountered null row element; skipping");
-                    continue;
-                }
-
-                List<WebElement> cols;
-                try {
-                    cols = row.findElements(By.tagName("td"));
-                } catch (Exception e) {
-                    LOGGER.log(Level.FINE, "Failed to find columns for a row; skipping row", e);
-                    continue;
-                }
-
-                if (Objects.isNull(cols) || cols.size() != 3) {
-                    LOGGER.fine("Skipping invalid row (expected 3 columns): " + (cols == null ? "null" : "size=" + cols.size()));
-                    continue; // skip invalid rows
-                }
-
-                Optional<String> dreamNameOpt = getCellText(cols, 0);
-                Optional<String> dreamTypeOpt = getCellText(cols, 2);
-
-                if (!dreamNameOpt.isPresent()) {
-                    LOGGER.fine("Dream name missing for row; skipping");
-                    continue;
-                }
-                if (!dreamTypeOpt.isPresent()) {
-                    LOGGER.fine("Dream type missing for row; skipping");
-                    continue;
-                }
-
-                String dreamName = dreamNameOpt.get();
-                String dreamType = dreamTypeOpt.get();
-
-                // Count Good/Bad dreams
-                if ("Good".equalsIgnoreCase(dreamType)) {
-                    goodCount++;
-                } else if ("Bad".equalsIgnoreCase(dreamType)) {
-                    badCount++;
-                } else {
-                    LOGGER.fine("Encountered unknown dream type: " + dreamType + " for dream: " + dreamName);
-                }
-
-                // Count frequency
-                dreamFrequency.put(dreamName, dreamFrequency.getOrDefault(dreamName, 0) + 1);
-            }
-
-            // Check recurring dreams
-            for (String recurring : recurringDreamNames) {
-                if (!Objects.isNull(recurring) && dreamFrequency.getOrDefault(recurring, 0) > 1) {
-                    recurringCount++;
-                }
-            }
-
-            int totalCount = goodCount + badCount;
-
-            LOGGER.info(String.format("Computed stats - Good: %d, Bad: %d, Total: %d, Recurring: %d",
-                    goodCount, badCount, totalCount, recurringCount));
-
-            // Perform validations if expected values are provided
-            validateMetric("Good dreams", EXPECTED_GOOD_COUNT, goodCount);
-            validateMetric("Bad dreams", EXPECTED_BAD_COUNT, badCount);
-            validateMetric("Total dreams", EXPECTED_TOTAL_COUNT, totalCount);
-            validateMetric("Recurring dreams", EXPECTED_RECURRING_COUNT, recurringCount);
-
+        } catch (TimeoutException te) {
+            LOGGER.log(Level.SEVERE, "Timeout while waiting for page elements", te);
         } catch (Exception e) {
-            LOGGER.log(Level.SEVERE, "Unhandled exception in processing", e);
+            LOGGER.log(Level.SEVERE, "Unexpected error during validation", e);
         } finally {
-            if (!Objects.isNull(driver)) {
-                try {
+            try {
+                // Attempt to quit in case try-with-resources did not (defensive).
+                if (driver != null) {
                     driver.quit();
-                    LOGGER.info("WebDriver quit successfully");
-                } catch (Exception e) {
-                    LOGGER.log(Level.WARNING, "Error while quitting WebDriver", e);
                 }
+            } catch (Exception e) {
+                LOGGER.log(Level.WARNING, "Error while quitting driver", e);
             }
         }
     }
 
     /**
-     * Safely extracts the text from a table cell at the given index.
+     * Finds the table rows containing dreams entries.
      *
-     * @param columns the list of cell elements
-     * @param index   the index of the desired cell
-     * @return an Optional containing trimmed text if present and non-empty, otherwise Optional.empty()
+     * @param driver  the WebDriver instance
+     * @param timeout the maximum wait time
+     * @return Optional of list of rows - empty if not found or no rows exist
      */
-    private static Optional<String> getCellText(List<WebElement> columns, int index) {
-        if (Objects.isNull(columns)) {
+    private static Optional<List<WebElement>> findTableRows(WebDriver driver, Duration timeout) {
+        try {
+            WebDriverWait wait = new WebDriverWait(driver, timeout);
+            wait.until(ExpectedConditions.visibilityOfElementLocated(By.cssSelector(TABLE_SELECTOR)));
+
+            List<WebElement> rows = driver.findElements(By.cssSelector(TABLE_ROWS_SELECTOR));
+            if (rows == null || rows.isEmpty()) {
+                LOGGER.warning("Table located but contains no rows");
+                return Optional.empty();
+            }
+            return Optional.of(rows);
+        } catch (TimeoutException te) {
+            LOGGER.log(Level.WARNING, "Timed out waiting for dreams table to appear", te);
+            return Optional.empty();
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Error while locating table rows", e);
             return Optional.empty();
         }
-        if (index < 0 || index >= columns.size()) {
+    }
+
+    /**
+     * Parses rows and computes statistics.
+     * The implementation is resilient to small DOM differences: it searches row text
+     * for keywords "good", "bad" and an indicator for recurring.
+     *
+     * @param rows list of WebElement rows
+     * @return a Stats object with computed values
+     */
+    private static Stats computeStats(List<WebElement> rows) {
+        int good = 0;
+        int bad = 0;
+        int recurring = 0;
+        int total = 0;
+
+        for (WebElement row : rows) {
+            try {
+                if (Objects.isNull(row)) {
+                    LOGGER.finer("Encountered null row element; skipping");
+                    continue;
+                }
+
+                String rowText = safeGetText(row).orElse("");
+
+                if (rowText.isBlank()) {
+                    LOGGER.finer("Empty row text; skipping");
+                    continue;
+                }
+
+                total++;
+
+                String lower = rowText.toLowerCase();
+                if (lower.contains("good")) {
+                    good++;
+                } else if (lower.contains("bad")) {
+                    bad++;
+                }
+
+                // Determine recurring: presence of the word "recurring" or an element with class 'recurring'
+                if (lower.contains("recurring")) {
+                    recurring++;
+                } else {
+                    // try to detect a child element denoting recurring (defensive)
+                    try {
+                        List<WebElement> recurringMarkers = row.findElements(By.cssSelector(".recurring"));
+                        if (!recurringMarkers.isEmpty()) {
+                            recurring++;
+                        }
+                    } catch (Exception e) {
+                        LOGGER.log(Level.FINE, "Unable to check for recurring marker on row", e);
+                    }
+                }
+            } catch (Exception e) {
+                // Continue processing other rows even if one row fails parsing
+                LOGGER.log(Level.WARNING, "Failed to parse a row; skipping", e);
+            }
+        }
+
+        return new Stats(good, bad, total, recurring);
+    }
+
+    /**
+     * Safely gets the text from a WebElement and returns it as Optional.
+     *
+     * @param element the element to get text from
+     * @return Optional containing text if present, otherwise Optional.empty()
+     */
+    private static Optional<String> safeGetText(WebElement element) {
+        if (Objects.isNull(element)) {
             return Optional.empty();
         }
         try {
-            WebElement cell = columns.get(index);
-            if (Objects.isNull(cell)) {
-                return Optional.empty();
-            }
-            String text = cell.getText();
-            if (text == null) {
-                return Optional.empty();
-            }
-            text = text.trim();
-            return text.isEmpty() ? Optional.empty() : Optional.of(text);
+            String txt = element.getText();
+            return Optional.ofNullable(txt);
         } catch (Exception e) {
-            LOGGER.log(Level.FINE, "Exception while retrieving cell text at index " + index, e);
+            LOGGER.log(Level.FINE, "Error retrieving text from element", e);
             return Optional.empty();
         }
     }
 
     /**
-     * Validates a computed metric against an expected Optional value. If the expected
-     * value is empty, validation is skipped. Logs results at INFO level for success and
-     * SEVERE for mismatch.
+     * Validates a computed metric against an expected Optional value if present.
      *
-     * @param metricName   human-readable metric name
-     * @param expectedOpt  optional expected value
-     * @param computedValue computed value to validate
+     * @param name       the metric name for logging
+     * @param expected   optional expected value
+     * @param actual     the computed actual value
      */
-    private static void validateMetric(String metricName, Optional<Integer> expectedOpt, int computedValue) {
-        if (Objects.isNull(expectedOpt)) {
-            LOGGER.warning("Expected value Optional is null for metric: " + metricName + ". Skipping validation.");
+    private static void validateIfExpected(String name, Optional<Integer> expected, int actual) {
+        Objects.requireNonNull(name, "Metric name must not be null");
+        if (expected == null) {
+            // Defensive: expected should never be null, but handle gracefully
+            LOGGER.warning(() -> "Expected value Optional for " + name + " is null; skipping validation");
             return;
         }
-        if (!expectedOpt.isPresent()) {
-            LOGGER.fine("No expected value provided for " + metricName + "; skipping validation.");
-            return;
-        }
-        int expected = expectedOpt.get();
-        if (expected == computedValue) {
-            LOGGER.info(String.format("Validation passed for %s: expected=%d, actual=%d", metricName, expected, computedValue));
+
+        if (expected.isPresent()) {
+            int exp = expected.get();
+            if (exp != actual) {
+                LOGGER.severe(() -> String.format("%s count mismatch: expected=%d, actual=%d", name, exp, actual));
+            } else {
+                LOGGER.info(() -> String.format("%s count matches expected value: %d", name, actual));
+            }
         } else {
-            LOGGER.severe(String.format("Validation FAILED for %s: expected=%d, actual=%d", metricName, expected, computedValue));
+            LOGGER.info(() -> String.format("%s count (no expected value provided): %d", name, actual));
+        }
+    }
+
+    /**
+     * Simple container class for statistics.
+     */
+    private static final class Stats {
+        private final int goodCount;
+        private final int badCount;
+        private final int totalCount;
+        private final int recurringCount;
+
+        Stats(int goodCount, int badCount, int totalCount, int recurringCount) {
+            this.goodCount = goodCount;
+            this.badCount = badCount;
+            this.totalCount = totalCount;
+            this.recurringCount = recurringCount;
+        }
+
+        int getGoodCount() {
+            return goodCount;
+        }
+
+        int getBadCount() {
+            return badCount;
+        }
+
+        int getTotalCount() {
+            return totalCount;
+        }
+
+        int getRecurringCount() {
+            return recurringCount;
+        }
+
+        @Override
+        public String toString() {
+            return "Stats{" +
+                    "good=" + goodCount +
+                    ", bad=" + badCount +
+                    ", total=" + totalCount +
+                    ", recurring=" + recurringCount +
+                    '}';
         }
     }
 }
