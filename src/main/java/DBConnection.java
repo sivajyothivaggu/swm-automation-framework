@@ -10,6 +10,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import javax.sql.rowset.CachedRowSet;
 import javax.sql.rowset.RowSetProvider;
 import org.slf4j.Logger;
@@ -38,8 +39,8 @@ public class DBConnection extends BaseDB {
      *
      * @param query the SQL SELECT query to execute; must not be null
      * @return a disconnected ResultSet containing the query results
-     * @throws SQLException           if a database access error occurs or the query is invalid
-     * @throws NullPointerException   if query is null
+     * @throws SQLException         if a database access error occurs or the query is invalid
+     * @throws NullPointerException if query is null
      */
     public ResultSet executeQuery(String query) throws SQLException {
         Objects.requireNonNull(query, "query must not be null");
@@ -53,12 +54,12 @@ public class DBConnection extends BaseDB {
             }
 
             try (Statement statement = connection.createStatement();
-                 ResultSet resultSet = statement.executeQuery(query)) {
+                 ResultSet result_set = statement.executeQuery(query)) {
 
-                CachedRowSet cachedRowSet = RowSetProvider.newFactory().createCachedRowSet();
-                cachedRowSet.populate(resultSet);
+                CachedRowSet cached_row_set = RowSetProvider.newFactory().createCachedRowSet();
+                cached_row_set.populate(result_set);
                 logger.debug("Query executed and results populated into CachedRowSet.");
-                return cachedRowSet;
+                return cached_row_set;
             }
         } catch (SQLException sqle) {
             logger.error("SQLException while executing query [{}]: {}", query, sqle.getMessage(), sqle);
@@ -118,40 +119,47 @@ public class DBConnection extends BaseDB {
     }
 
     /**
-     * Converts the provided ResultSet into a List of Maps, one map per row where
-     * the keys are column labels and the values are the column values.
+     * Converts the provided ResultSet into a List of Maps where each Map represents a row
+     * with column label to value mappings.
      *
-     * The method will close the provided ResultSet when finished.
+     * Note: This method does not close the provided ResultSet. If the caller passes a
+     * connected ResultSet they are responsible for closing the underlying resources. For
+     * CachedRowSet (disconnected) it is safe to iterate and then discard.
      *
-     * @param resultSet the ResultSet to convert; must not be null
-     * @return non-null List of rows (may be empty if ResultSet has no rows)
-     * @throws SQLException           if an error occurs while reading the ResultSet
-     * @throws NullPointerException   if resultSet is null
+     * @param result_set the ResultSet to convert; must not be null
+     * @return a List of Maps representing the rows; never null but may be empty
+     * @throws SQLException if a database access error occurs while iterating the ResultSet
      */
-    public List<Map<String, Object>> getResultList(ResultSet resultSet) throws SQLException {
-        Objects.requireNonNull(resultSet, "resultSet must not be null");
+    public List<Map<String, Object>> getResultList(ResultSet result_set) throws SQLException {
+        Objects.requireNonNull(result_set, "result_set must not be null");
         logger.debug("Converting ResultSet to List<Map<String,Object>>");
 
-        List<Map<String, Object>> rows = new ArrayList<>();
+        List<Map<String, Object>> result_list = new ArrayList<>();
 
-        // Use try-with-resources to ensure the ResultSet is closed.
-        try (ResultSet rs = resultSet) {
-            ResultSetMetaData metaData = rs.getMetaData();
-            int columnCount = metaData.getColumnCount();
-
-            while (rs.next()) {
-                Map<String, Object> row = new HashMap<>();
-                for (int i = 1; i <= columnCount; i++) {
-                    String columnLabel = metaData.getColumnLabel(i);
-                    if (columnLabel == null || columnLabel.isEmpty()) {
-                        columnLabel = metaData.getColumnName(i);
-                    }
-                    Object value = rs.getObject(i);
-                    row.put(columnLabel, value);
-                }
-                rows.add(row);
+        try {
+            ResultSetMetaData meta_data = result_set.getMetaData();
+            if (Objects.isNull(meta_data)) {
+                logger.warn("ResultSetMetaData is null for the provided ResultSet.");
+                return result_list;
             }
-            logger.debug("Converted ResultSet to list with {} rows.", rows.size());
+
+            int column_count = meta_data.getColumnCount();
+
+            while (result_set.next()) {
+                Map<String, Object> row_map = new HashMap<>(column_count);
+                for (int col = 1; col <= column_count; col++) {
+                    String column_name = meta_data.getColumnLabel(col);
+                    if (column_name == null || column_name.isEmpty()) {
+                        // Fallback to column name if label is empty
+                        column_name = meta_data.getColumnName(col);
+                    }
+                    Object value = result_set.getObject(col);
+                    row_map.put(column_name, value);
+                }
+                result_list.add(row_map);
+            }
+            logger.debug("ResultSet converted to list with {} rows.", result_list.size());
+            return result_list;
         } catch (SQLException sqle) {
             logger.error("SQLException while converting ResultSet to list: {}", sqle.getMessage(), sqle);
             throw sqle;
@@ -159,49 +167,51 @@ public class DBConnection extends BaseDB {
             logger.error("Unexpected exception while converting ResultSet to list: {}", e.getMessage(), e);
             throw new SQLException("Unexpected error converting ResultSet to list", e);
         }
-
-        return rows;
     }
 
     /**
-     * Utility to fetch a single row from a ResultSet as a Map. If the ResultSet has
-     * no rows, an empty Map is returned. The ResultSet will be closed by this method.
+     * Returns the first row from the provided ResultSet as an Optional Map. If the ResultSet
+     * contains no rows, Optional.empty() is returned.
      *
-     * @param resultSet the ResultSet to read; must not be null
-     * @return non-null Map representing the first row; empty if no rows
-     * @throws SQLException         if an error occurs reading the ResultSet
-     * @throws NullPointerException if resultSet is null
+     * @param result_set the ResultSet to read; must not be null
+     * @return Optional containing the first row as a Map, or Optional.empty() if no rows
+     * @throws SQLException if a database access error occurs while iterating the ResultSet
      */
-    public Map<String, Object> getSingleResult(ResultSet resultSet) throws SQLException {
-        Objects.requireNonNull(resultSet, "resultSet must not be null");
-        logger.debug("Converting ResultSet to single Map<String,Object>");
+    public Optional<Map<String, Object>> getSingleResult(ResultSet result_set) throws SQLException {
+        Objects.requireNonNull(result_set, "result_set must not be null");
+        logger.debug("Extracting single result from ResultSet");
 
-        try (ResultSet rs = resultSet) {
-            ResultSetMetaData metaData = rs.getMetaData();
-            int columnCount = metaData.getColumnCount();
+        try {
+            ResultSetMetaData meta_data = result_set.getMetaData();
+            if (Objects.isNull(meta_data)) {
+                logger.warn("ResultSetMetaData is null for the provided ResultSet.");
+                return Optional.empty();
+            }
 
-            if (rs.next()) {
-                Map<String, Object> row = new HashMap<>();
-                for (int i = 1; i <= columnCount; i++) {
-                    String columnLabel = metaData.getColumnLabel(i);
-                    if (columnLabel == null || columnLabel.isEmpty()) {
-                        columnLabel = metaData.getColumnName(i);
+            int column_count = meta_data.getColumnCount();
+
+            if (result_set.next()) {
+                Map<String, Object> row_map = new HashMap<>(column_count);
+                for (int col = 1; col <= column_count; col++) {
+                    String column_name = meta_data.getColumnLabel(col);
+                    if (column_name == null || column_name.isEmpty()) {
+                        column_name = meta_data.getColumnName(col);
                     }
-                    Object value = rs.getObject(i);
-                    row.put(columnLabel, value);
+                    Object value = result_set.getObject(col);
+                    row_map.put(column_name, value);
                 }
-                logger.debug("Converted ResultSet to single row map.");
-                return row;
+                logger.debug("Single result extracted.");
+                return Optional.of(row_map);
             } else {
-                logger.debug("ResultSet contained no rows; returning empty map.");
-                return new HashMap<>();
+                logger.debug("ResultSet contains no rows; returning Optional.empty().");
+                return Optional.empty();
             }
         } catch (SQLException sqle) {
-            logger.error("SQLException while converting ResultSet to single map: {}", sqle.getMessage(), sqle);
+            logger.error("SQLException while extracting single result: {}", sqle.getMessage(), sqle);
             throw sqle;
         } catch (Exception e) {
-            logger.error("Unexpected exception while converting ResultSet to single map: {}", e.getMessage(), e);
-            throw new SQLException("Unexpected error converting ResultSet to single map", e);
+            logger.error("Unexpected exception while extracting single result: {}", e.getMessage(), e);
+            throw new SQLException("Unexpected error extracting single result", e);
         }
     }
 }

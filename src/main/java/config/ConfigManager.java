@@ -108,168 +108,167 @@ public final class ConfigManager {
      * This method will not throw; it logs errors and returns an empty Optional when config is not available or if the supplier fails.
      *
      * @param supplier   supplier that retrieves the value from config
-     * @param callerName method name for logging/diagnostics
-     * @param <T>        type of value to return
-     * @return Optional containing the value or Optional.empty() if unavailable or an error occurred
+     * @param callerName method name for diagnostics
+     * @param <T>        type of the returned value
+     * @return Optional.of(value) if retrieval succeeded and value non-null; Optional.empty() otherwise
      */
-    private static <T> Optional<T> fetchOptional(final Supplier<T> supplier, final String callerName) {
+    private static <T> Optional<T> safeGet(final Supplier<T> supplier, final String callerName) {
+        if (Objects.isNull(supplier)) {
+            LOGGER.log(Level.WARNING, "safeGet called with null supplier. Caller: {0}", callerName);
+            return Optional.empty();
+        }
         if (Objects.isNull(config)) {
-            LOGGER.log(Level.FINE, "Config not available for optional fetch. Caller: {0}", callerName);
+            LOGGER.log(Level.FINE, "Configuration not available for optional getter. Caller: {0}", callerName);
             return Optional.empty();
         }
         try {
-            return Optional.ofNullable(supplier.get());
+            final T result = supplier.get();
+            return Optional.ofNullable(result);
         } catch (Exception e) {
-            LOGGER.log(Level.SEVERE, "Error fetching configuration value. Caller: " + callerName, e);
+            LOGGER.log(Level.WARNING, "Exception while retrieving configuration value. Caller: " + callerName, e);
             return Optional.empty();
         }
     }
 
     /**
-     * Generic helper to fetch a value from the configuration and throw RuntimeException on failure.
-     * This is intended for strict getters where callers expect a value and any failure is fatal.
+     * Get the base URL from configuration. Throws IllegalStateException if configuration is not initialized or value is missing.
      *
-     * @param supplier   supplier that retrieves the value from config
-     * @param callerName method name for logging/diagnostics
-     * @param <T>        type of value to return
-     * @return non-null value from the supplier
-     * @throws IllegalStateException if configuration is not available
-     * @throws RuntimeException      if supplier throws or returns null
-     */
-    private static <T> T fetchOrThrow(final Supplier<T> supplier, final String callerName) {
-        ensureConfigAvailable(callerName);
-        try {
-            final T value = supplier.get();
-            if (value == null) {
-                final String message = "Configuration value is null. Caller: " + callerName;
-                LOGGER.log(Level.SEVERE, message);
-                throw new RuntimeException(message);
-            }
-            return value;
-        } catch (RuntimeException re) {
-            LOGGER.log(Level.SEVERE, "Runtime error while fetching configuration. Caller: " + callerName, re);
-            throw re;
-        } catch (Exception e) {
-            LOGGER.log(Level.SEVERE, "Unexpected error while fetching configuration. Caller: " + callerName, e);
-            throw new RuntimeException("Failed to fetch configuration value for: " + callerName, e);
-        }
-    }
-
-    /**
-     * Get the base URL for the current environment if available.
-     *
-     * @return Optional containing the base URL or Optional.empty() if unavailable
-     */
-    public static Optional<String> getBaseUrlOptional() {
-        return fetchOptional(() -> config.getUrl(), "getBaseUrlOptional");
-    }
-
-    /**
-     * Get the base URL for the current environment.
-     *
-     * @return base URL string
-     * @throws IllegalStateException if configuration is not initialized
-     * @throws RuntimeException      if the value cannot be retrieved
+     * @return base URL (non-null, non-empty)
      */
     public static String getBaseUrl() {
-        return fetchOrThrow(() -> config.getUrl(), "getBaseUrl");
+        ensureConfigAvailable("getBaseUrl");
+        try {
+            final String value = config.getBaseUrl();
+            if (value == null || value.trim().isEmpty()) {
+                final String message = "Base URL is not configured";
+                LOGGER.log(Level.SEVERE, message);
+                throw new IllegalStateException(message);
+            }
+            return value;
+        } catch (Exception e) {
+            LOGGER.log(Level.SEVERE, "Failed to get base URL", e);
+            throw new IllegalStateException("Failed to get base URL", e);
+        }
     }
 
     /**
-     * Get the API URL for the current environment if available.
+     * Optional-safe getter for base URL. Returns Optional.empty() on missing configuration or errors.
      *
-     * @return Optional containing the API URL or Optional.empty() if unavailable
+     * @return Optional base URL
      */
-    public static Optional<String> getApiUrlOptional() {
-        return fetchOptional(() -> config.getApiUrl(), "getApiUrlOptional");
+    public static Optional<String> getBaseUrlOptional() {
+        return safeGet(() -> config.getBaseUrl(), "getBaseUrlOptional");
     }
 
     /**
-     * Get the API URL for the current environment.
+     * Get the API URL from configuration. Throws IllegalStateException if configuration is not initialized or value is missing.
      *
-     * @return API URL string
-     * @throws IllegalStateException if configuration is not initialized
-     * @throws RuntimeException      if the value cannot be retrieved
+     * @return API URL (non-null, non-empty)
      */
     public static String getApiUrl() {
-        return fetchOrThrow(() -> config.getApiUrl(), "getApiUrl");
+        ensureConfigAvailable("getApiUrl");
+        try {
+            final String value = config.getApiUrl();
+            if (value == null || value.trim().isEmpty()) {
+                final String message = "API URL is not configured";
+                LOGGER.log(Level.SEVERE, message);
+                throw new IllegalStateException(message);
+            }
+            return value;
+        } catch (Exception e) {
+            LOGGER.log(Level.SEVERE, "Failed to get API URL", e);
+            throw new IllegalStateException("Failed to get API URL", e);
+        }
     }
 
     /**
-     * Get the database username for the current environment if available.
+     * Optional-safe getter for API URL. Returns Optional.empty() on missing configuration or errors.
      *
-     * @return Optional containing the DB username or Optional.empty() if unavailable
+     * @return Optional API URL
      */
-    public static Optional<String> getDbUserOptional() {
-        return fetchOptional(() -> config.getDbUser(), "getDbUserOptional");
+    public static Optional<String> getApiUrlOptional() {
+        return safeGet(() -> config.getApiUrl(), "getApiUrlOptional");
     }
 
     /**
-     * Get the database username for the current environment.
+     * Get the database username from configuration. Throws IllegalStateException if configuration is not initialized or value is missing.
      *
-     * @return DB username string
-     * @throws IllegalStateException if configuration is not initialized
-     * @throws RuntimeException      if the value cannot be retrieved
+     * @return database username (non-null, non-empty)
      */
     public static String getDbUser() {
-        return fetchOrThrow(() -> config.getDbUser(), "getDbUser");
+        ensureConfigAvailable("getDbUser");
+        try {
+            final String value = config.getDbUser();
+            if (value == null || value.trim().isEmpty()) {
+                final String message = "Database user is not configured";
+                LOGGER.log(Level.SEVERE, message);
+                throw new IllegalStateException(message);
+            }
+            return value;
+        } catch (Exception e) {
+            LOGGER.log(Level.SEVERE, "Failed to get database user", e);
+            throw new IllegalStateException("Failed to get database user", e);
+        }
     }
 
     /**
-     * Get the database password for the current environment if available.
+     * Optional-safe getter for database username. Returns Optional.empty() on missing configuration or errors.
      *
-     * @return Optional containing the DB password or Optional.empty() if unavailable
+     * @return Optional database username
      */
-    public static Optional<String> getDbPasswordOptional() {
-        return fetchOptional(() -> config.getDbPassword(), "getDbPasswordOptional");
+    public static Optional<String> getDbUserOptional() {
+        return safeGet(() -> config.getDbUser(), "getDbUserOptional");
     }
 
     /**
-     * Get the database password for the current environment.
+     * Get the database password from configuration. Throws IllegalStateException if configuration is not initialized or value is missing.
      *
-     * @return DB password string
-     * @throws IllegalStateException if configuration is not initialized
-     * @throws RuntimeException      if the value cannot be retrieved
+     * @return database password (non-null, non-empty)
      */
     public static String getDbPassword() {
-        return fetchOrThrow(() -> config.getDbPassword(), "getDbPassword");
+        ensureConfigAvailable("getDbPassword");
+        try {
+            final String value = config.getDbPassword();
+            if (value == null || value.trim().isEmpty()) {
+                final String message = "Database password is not configured";
+                LOGGER.log(Level.SEVERE, message);
+                throw new IllegalStateException(message);
+            }
+            return value;
+        } catch (Exception e) {
+            LOGGER.log(Level.SEVERE, "Failed to get database password", e);
+            throw new IllegalStateException("Failed to get database password", e);
+        }
     }
 
     /**
-     * Get the configured browser name if available.
+     * Optional-safe getter for database password. Returns Optional.empty() on missing configuration or errors.
      *
-     * @return Optional containing the browser name or Optional.empty() if unavailable
+     * @return Optional database password
      */
-    public static Optional<String> getBrowserOptional() {
-        return Optional.ofNullable(browser);
+    public static Optional<String> getDbPasswordOptional() {
+        return safeGet(() -> config.getDbPassword(), "getDbPasswordOptional");
     }
 
     /**
-     * Get the configured browser name. Always returns a non-null value (defaults to {@link #DEFAULT_BROWSER}).
+     * Get the configured browser. This returns a non-null, non-empty value (defaults to DEFAULT_BROWSER when not set).
      *
      * @return browser name
      */
     public static String getBrowser() {
-        return Optional.ofNullable(browser).orElse(DEFAULT_BROWSER);
+        if (Objects.isNull(browser) || browser.trim().isEmpty()) {
+            LOGGER.log(Level.CONFIG, "Browser not configured, defaulting to {0}", DEFAULT_BROWSER);
+            return DEFAULT_BROWSER;
+        }
+        return browser;
     }
 
     /**
-     * Get the name of the currently loaded environment if available.
+     * Optional-safe getter for browser.
      *
-     * @return Optional containing the environment name or Optional.empty() if unavailable
+     * @return Optional browser name
      */
-    public static Optional<String> getEnvironmentNameOptional() {
-        return fetchOptional(() -> config.getEnvironmentName(), "getEnvironmentNameOptional");
-    }
-
-    /**
-     * Get the name of the currently loaded environment.
-     *
-     * @return environment name
-     * @throws IllegalStateException if configuration is not initialized
-     * @throws RuntimeException      if the value cannot be retrieved
-     */
-    public static String getEnvironmentName() {
-        return fetchOrThrow(() -> config.getEnvironmentName(), "getEnvironmentName");
+    public static Optional<String> getBrowserOptional() {
+        return Optional.ofNullable(browser).map(String::trim).filter(s -> !s.isEmpty());
     }
 }

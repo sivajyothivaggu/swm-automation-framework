@@ -28,7 +28,7 @@ import java.util.Optional;
 public class AuthEndpoints extends BaseAPI {
     private static final Logger LOGGER = LoggerFactory.getLogger(AuthEndpoints.class);
 
-    // Endpoint path constants - follow UPPER_CASE naming convention for constants.
+    // Endpoint path constants - using UPPER_CASE naming convention for constants.
     private static final String LOGIN_ENDPOINT = "/auth/login";
     private static final String LOGOUT_ENDPOINT = "/auth/logout";
 

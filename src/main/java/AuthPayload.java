@@ -8,15 +8,18 @@ import org.slf4j.LoggerFactory;
 /**
  * Payload object representing authentication credentials.
  *
- * <p>This immutable-aware class holds a username and password for authentication operations.
- * It performs validation to ensure values are non-null and non-blank and provides both
- * Optional-based accessors for safer null handling and traditional getters/setters for
- * backward compatibility.</p>
+ * <p>This class holds a username and password for authentication operations.
+ * It validates inputs to ensure values are non-null and non-blank and provides
+ * both Optional-based accessors for safer null handling and traditional
+ * getters/setters for backward compatibility.</p>
  *
  * <p>Usage notes:
  * - Constructor and setters will throw IllegalArgumentException when supplied with null or blank values.
  * - Use getUsernameOptional() / getPasswordOptional() to obtain Optional-wrapped values.
  * - toString() and logs mask sensitive values to avoid leaking secrets.</p>
+ *
+ * <p>Threading: This class is mutable and not thread-safe. If you need thread-safety,
+ * synchronize externally or create immutable variants.</p>
  *
  * @since 1.0
  */
@@ -47,7 +50,6 @@ public final class AuthPayload {
      * @throws IllegalArgumentException if username or password is null or blank
      */
     public AuthPayload(String username, String password) {
-        // Validate inputs and initialize fields. Use explicit logging for failures.
         validateNotBlank(username, "username");
         validateNotBlank(password, "password");
         this.username = username;
@@ -137,6 +139,12 @@ public final class AuthPayload {
     /**
      * Masks a value for safe logging. If the value is null returns "null".
      *
+     * <p>Masking rules:
+     * - null -> "null"
+     * - length <= 2 -> MASK_SUFFIX
+     * - length == 3 -> first char + MASK_SUFFIX
+     * - length > 3 -> first char + MASK_SUFFIX + last char</p>
+     *
      * @param value the value to mask
      * @return masked representation suitable for logs
      */
@@ -148,22 +156,29 @@ public final class AuthPayload {
         if (len <= 2) {
             return MASK_SUFFIX;
         }
-        // Keep first 2 characters and append mask suffix to avoid leaking full secret
-        return value.substring(0, 2) + MASK_SUFFIX;
+        if (len == 3) {
+            return value.charAt(0) + MASK_SUFFIX;
+        }
+        // length > 3: keep first and last char to give minimal context
+        return new StringBuilder()
+                .append(value.charAt(0))
+                .append(MASK_SUFFIX)
+                .append(value.charAt(len - 1))
+                .toString();
     }
 
     /**
-     * Returns a string representation of this object with sensitive fields masked.
+     * Provides a safe string representation that masks sensitive fields.
      *
-     * @return string representation with masked sensitive values
+     * @return masked string representation
      */
     @Override
     public String toString() {
-        return "AuthPayload{username='" + maskForLogs(username) + "', password='" + MASK_SUFFIX + "'}";
+        return "AuthPayload{username='" + maskForLogs(username) + "', password='" + maskForLogs(password) + "'}";
     }
 
     /**
-     * Equality based on username and password values.
+     * Equality check considers both username and password.
      *
      * @param o other object
      * @return true if equal
@@ -181,7 +196,7 @@ public final class AuthPayload {
     }
 
     /**
-     * Hash code derived from username and password.
+     * Hash code composed from username and password.
      *
      * @return hash code
      */

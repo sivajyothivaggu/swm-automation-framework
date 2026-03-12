@@ -100,31 +100,80 @@ public final class EnvironmentConfig {
                     Method closeMethod = reader.getClass().getMethod("close");
                     if (!Objects.isNull(closeMethod)) {
                         closeMethod.setAccessible(true);
-                        closeMethod.invoke(reader);
-                        LOGGER.debug("Closed PropertyReader for {}", fileName);
+                        try {
+                            closeMethod.invoke(reader);
+                            LOGGER.debug("Closed PropertyReader for {}", fileName);
+                        } catch (IllegalAccessException | InvocationTargetException ite) {
+                            LOGGER.warn("Failed to invoke close() on PropertyReader for {}: {}", fileName, ite.getMessage(), ite);
+                        }
                     }
                 } catch (NoSuchMethodException nsme) {
-                    // No close method available - nothing to do.
-                    LOGGER.debug("PropertyReader for {} does not declare a close() method", fileName);
-                } catch (IllegalAccessException | InvocationTargetException iae) {
-                    LOGGER.warn("Failed to invoke close() on PropertyReader for {}: {}", fileName, iae.getMessage(), iae);
-                } catch (Exception ex) {
-                    LOGGER.warn("Unexpected exception while closing PropertyReader for {}: {}", fileName, ex.getMessage(), ex);
+                    // No close method available; nothing to do.
+                    LOGGER.debug("PropertyReader for {} does not have close() method.", fileName);
+                } catch (SecurityException se) {
+                    LOGGER.warn("Security manager prevented reflective close of PropertyReader for {}: {}", fileName, se.getMessage(), se);
                 }
             }
         }
 
+        // Assign to final fields after successful load (if constructor reaches here, either loaded or default nulls)
         this.url = tmpUrl;
         this.apiUrl = tmpApiUrl;
         this.dbUrl = tmpDbUrl;
         this.dbUser = tmpDbUser;
         this.dbPassword = tmpDbPassword;
-
-        LOGGER.info("EnvironmentConfig initialized for env='{}' (properties file: {})", env, fileName);
     }
 
     /**
-     * Safely trims a string. Returns null if input is null or empty after trimming.
+     * Returns the application URL if present.
+     *
+     * @return Optional containing the application URL or empty if not set
+     */
+    public Optional<String> getUrl() {
+        return Optional.ofNullable(url);
+    }
+
+    /**
+     * Returns the API URL if present.
+     *
+     * @return Optional containing the API URL or empty if not set
+     */
+    public Optional<String> getApiUrl() {
+        return Optional.ofNullable(apiUrl);
+    }
+
+    /**
+     * Returns the database URL if present.
+     *
+     * @return Optional containing the DB URL or empty if not set
+     */
+    public Optional<String> getDbUrl() {
+        return Optional.ofNullable(dbUrl);
+    }
+
+    /**
+     * Returns the database username if present.
+     *
+     * @return Optional containing the DB username or empty if not set
+     */
+    public Optional<String> getDbUser() {
+        return Optional.ofNullable(dbUser);
+    }
+
+    /**
+     * Returns the database password if present.
+     *
+     * <p>Note: Consumers of this password should handle it carefully and avoid logging
+     * or exposing it. This class will mask the value when logging.</p>
+     *
+     * @return Optional containing the DB password or empty if not set
+     */
+    public Optional<String> getDbPassword() {
+        return Optional.ofNullable(dbPassword);
+    }
+
+    /**
+     * Helper to safely trim a string and return null when the trimmed value is empty or input is null.
      *
      * @param value input string
      * @return trimmed string or null
@@ -138,73 +187,21 @@ public final class EnvironmentConfig {
     }
 
     /**
-     * Mask a value for safe logging (keeps first and last character when possible).
+     * Mask a sensitive value for logging purposes.
      *
-     * @param value original value
-     * @return masked representation
+     * @param val the sensitive value
+     * @return masked representation (e.g. ****ed)
      */
-    private static String maskValue(String value) {
-        if (Objects.isNull(value) || value.length() <= 2) {
-            return "<masked>";
+    private static String maskValue(String val) {
+        if (Objects.isNull(val) || val.isEmpty()) {
+            return "<null>";
         }
-        int len = value.length();
+        int visible = Math.min(3, val.length());
         StringBuilder sb = new StringBuilder();
-        sb.append(value.charAt(0));
-        for (int i = 1; i < len - 1; i++) {
+        for (int i = 0; i < val.length() - visible; i++) {
             sb.append('*');
         }
-        sb.append(value.charAt(len - 1));
+        sb.append(val.substring(val.length() - visible));
         return sb.toString();
-    }
-
-    /**
-     * @return Optional containing the application URL if present.
-     */
-    public Optional<String> getUrl() {
-        return Optional.ofNullable(this.url);
-    }
-
-    /**
-     * @return Optional containing the API URL if present.
-     */
-    public Optional<String> getApiUrl() {
-        return Optional.ofNullable(this.apiUrl);
-    }
-
-    /**
-     * @return Optional containing the database URL if present.
-     */
-    public Optional<String> getDbUrl() {
-        return Optional.ofNullable(this.dbUrl);
-    }
-
-    /**
-     * @return Optional containing the database user if present.
-     */
-    public Optional<String> getDbUser() {
-        return Optional.ofNullable(this.dbUser);
-    }
-
-    /**
-     * @return Optional containing the database password if present.
-     */
-    public Optional<String> getDbPassword() {
-        return Optional.ofNullable(this.dbPassword);
-    }
-
-    /**
-     * Returns a safe string representation for logging or debugging. Sensitive fields are masked.
-     *
-     * @return string representation with masked sensitive values
-     */
-    @Override
-    public String toString() {
-        return "EnvironmentConfig{" +
-                "url='" + this.url + '\'' +
-                ", apiUrl='" + this.apiUrl + '\'' +
-                ", dbUrl='" + this.dbUrl + '\'' +
-                ", dbUser='" + (Objects.isNull(this.dbUser) ? "<null>" : maskValue(this.dbUser)) + '\'' +
-                ", dbPassword='" + (Objects.isNull(this.dbPassword) ? "<null>" : "<masked>") + '\'' +
-                '}';
     }
 }

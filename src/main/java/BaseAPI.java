@@ -64,15 +64,15 @@ public class BaseAPI {
      * @throws RuntimeException for unexpected failures while building the RequestSpecification
      */
     protected RequestSpecification getRequestSpec() {
-        final String raw_api_url;
+        final String rawApiUrl;
         try {
-            raw_api_url = ConfigManager.getApiUrl();
+            rawApiUrl = ConfigManager.getApiUrl();
         } catch (Exception e) {
             logger.error("Failed to retrieve API URL from ConfigManager", e);
             throw new IllegalStateException("Unable to retrieve API URL from configuration", e);
         }
 
-        final String api_url = Optional.ofNullable(raw_api_url)
+        final String apiUrl = Optional.ofNullable(rawApiUrl)
                 .map(String::trim)
                 .filter(s -> !s.isBlank())
                 .orElseThrow(() -> {
@@ -82,25 +82,31 @@ public class BaseAPI {
 
         try {
             // Validate the URL is well-formed and has a scheme (http/https)
-            final URI uri_obj = new URI(api_url);
-            if (Objects.isNull(uri_obj.getScheme()) || uri_obj.getScheme().isBlank()) {
-                logger.error("Configured API URL '{}' does not contain a valid scheme", api_url);
+            final URI uri = new URI(apiUrl);
+            if (Objects.isNull(uri.getScheme()) || uri.getScheme().isBlank()) {
+                logger.error("Configured API URL '{}' does not contain a valid scheme", apiUrl);
                 throw new IllegalStateException("API URL is invalid: missing scheme");
             }
 
-            final String scheme_lower = uri_obj.getScheme().toLowerCase();
-            if (!"http".equals(scheme_lower) && !"https".equals(scheme_lower)) {
-                logger.error("Configured API URL '{}' has unsupported scheme '{}'", api_url, uri_obj.getScheme());
-                throw new IllegalStateException("API URL has unsupported scheme: " + uri_obj.getScheme());
+            final String schemeLower = uri.getScheme().toLowerCase();
+            if (!"http".equals(schemeLower) && !"https".equals(schemeLower)) {
+                logger.error("Configured API URL '{}' has unsupported scheme '{}'", apiUrl, uri.getScheme());
+                throw new IllegalStateException("API URL has unsupported scheme: " + uri.getScheme());
             }
 
             // Normalize the URI to avoid unexpected whitespace or encoding issues
-            final String normalized_base_uri = uri_obj.normalize().toASCIIString();
-            RestAssured.baseURI = normalized_base_uri;
+            final String normalizedBaseUri = uri.normalize().toASCIIString();
+            RestAssured.baseURI = normalizedBaseUri;
 
-            final RequestSpecification request_spec = RestAssured.given()
-                    .header(HEADER_CONTENT_TYPE, APPLICATION_JSON)
-                    .header(HEADER_ACCEPT, APPLICATION_JSON);
+            final RequestSpecification requestSpec;
+            try {
+                requestSpec = RestAssured.given()
+                        .header(HEADER_CONTENT_TYPE, APPLICATION_JSON)
+                        .header(HEADER_ACCEPT, APPLICATION_JSON);
+            } catch (Exception e) {
+                logger.error("Failed to build RequestSpecification for base URI: {}", RestAssured.baseURI, e);
+                throw new RuntimeException("Failed to build RequestSpecification", e);
+            }
 
             if (logger.isDebugEnabled()) {
                 logger.debug("Built RequestSpecification for base URI: {}", RestAssured.baseURI);
@@ -108,18 +114,21 @@ public class BaseAPI {
                 logger.info("RequestSpecification created for base URI: {}", RestAssured.baseURI);
             }
 
-            return request_spec;
+            return requestSpec;
         } catch (URISyntaxException e) {
-            logger.error("Configured API URL '{}' is not a valid URI", api_url, e);
+            logger.error("Configured API URL '{}' is not a valid URI", apiUrl, e);
             throw new IllegalStateException("API URL is invalid", e);
+        } catch (IllegalStateException e) {
+            // preserve IllegalStateException semantics after logging
+            logger.error("Invalid API configuration detected: {}", e.getMessage());
+            throw e;
         } catch (RuntimeException e) {
-            // Re-throw runtime exceptions after logging to preserve original semantics.
-            logger.error("Runtime exception while creating RequestSpecification for base URI: {}", api_url, e);
+            logger.error("Runtime exception while creating RequestSpecification for API URL '{}'", apiUrl, e);
             throw e;
         } catch (Exception e) {
-            // Catch-all to ensure visibility and consistent failure mode.
-            logger.error("Failed to create RequestSpecification for base URI: {}", api_url, e);
-            throw new RuntimeException("Failed to build RequestSpecification", e);
+            // Catch-all to ensure no unexpected exceptions escape without logging
+            logger.error("Unexpected exception while creating RequestSpecification for API URL '{}'", apiUrl, e);
+            throw new RuntimeException("Unexpected error while creating RequestSpecification", e);
         }
     }
 }

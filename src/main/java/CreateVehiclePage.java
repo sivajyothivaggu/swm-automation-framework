@@ -117,111 +117,127 @@ public class CreateVehiclePage extends BasePage {
                         return new NoSuchElementException(msg);
                     });
 
-            // Interact with the elements safely
-            safeClearAndSendKeys(numberElement, number, "vehicleNumber");
-            safeClearAndSendKeys(typeElement, type, "vehicleType");
-            safeClearAndSendKeys(capacityElement, cap, "capacity");
+            // Populate fields
+            setElementValue(numberElement, number, "vehicleNumber");
+            setElementValue(typeElement, type, "vehicleType");
+            setElementValue(capacityElement, cap, "capacity");
 
-            safeClick(submitEl, "submitButton");
+            // Submit the form
+            clickElement(submitEl, "submitButton");
 
-            logger.info("createVehicle completed successfully for number='{}'", number);
-        } catch (IllegalArgumentException e) {
-            // Re-throw validation exceptions unchanged after logging
-            logger.error("Validation error in createVehicle: {}", e.getMessage());
+            logger.info("createVehicle completed for number='{}'", number);
+        } catch (IllegalStateException | IllegalArgumentException e) {
+            // Rethrow known exceptions after logging
+            logger.error("createVehicle failed due to: {}", e.getMessage(), e);
             throw e;
-        } catch (NoSuchElementException | ElementNotInteractableException | StaleElementReferenceException e) {
-            String msg = "Element interaction failure while creating vehicle: " + e.getMessage();
-            logger.error(msg, e);
-            throw new IllegalStateException(msg, e);
-        } catch (WebDriverException e) {
-            String msg = "WebDriver encountered an error while creating vehicle: " + e.getMessage();
-            logger.error(msg, e);
-            throw new IllegalStateException(msg, e);
-        } catch (RuntimeException e) {
-            // Catch-all to ensure callers receive consistent exceptions and we log unexpected runtime issues.
-            String msg = "Unexpected error while creating vehicle: " + e.getMessage();
-            logger.error(msg, e);
-            throw new IllegalStateException(msg, e);
+        } catch (Exception e) {
+            // Wrap unexpected exceptions to provide a consistent API
+            logger.error("Unexpected error in createVehicle: {}", e.getMessage(), e);
+            throw new IllegalStateException("Failed to create vehicle due to unexpected error", e);
         }
     }
 
     /**
-     * Ensure the provided WebElement reference is non-null and interactable.
+     * Ensures that a given WebElement is present (non-null), displayed and enabled (interactable).
+     * Returns an Optional containing the element if checks pass, or an empty Optional otherwise.
      *
-     * <p>If the element reference is null or accessing its state throws a Selenium-related
-     * exception (stale, not present, etc.), an empty Optional is returned.</p>
+     * <p>This method catches transient Selenium exceptions like {@link StaleElementReferenceException}
+     * and treats them as non-interactable.</p>
      *
-     * @param element the WebElement to verify
-     * @param name    logical name for logging
-     * @return Optional containing the element if present and interactable, otherwise Optional.empty()
+     * @param element element to check (may be null)
+     * @param name    logical name of the element for logging
+     * @return Optional containing the element when present and interactable; empty otherwise
      */
     private Optional<WebElement> ensureElementPresentAndInteractable(WebElement element, String name) {
         if (Objects.isNull(element)) {
             logger.warn("Element '{}' is null (not injected).", name);
             return Optional.empty();
         }
-
         try {
-            // Accessing displayed/enabled can throw StaleElementReferenceException or NoSuchElementException
             boolean displayed = element.isDisplayed();
             boolean enabled = element.isEnabled();
             if (!displayed) {
-                logger.warn("Element '{}' is not displayed.", name);
+                logger.warn("Element '{}' is present but not displayed.", name);
                 return Optional.empty();
             }
             if (!enabled) {
-                logger.warn("Element '{}' is not enabled.", name);
+                logger.warn("Element '{}' is present but not enabled.", name);
                 return Optional.empty();
             }
             return Optional.of(element);
-        } catch (StaleElementReferenceException | NoSuchElementException | WebDriverException e) {
-            logger.warn("Element '{}' not present or stale: {}", name, e.getMessage());
+        } catch (StaleElementReferenceException sere) {
+            logger.warn("Element '{}' is stale: {}", name, sere.getMessage(), sere);
+            return Optional.empty();
+        } catch (WebDriverException wde) {
+            logger.error("WebDriver error while checking element '{}': {}", name, wde.getMessage(), wde);
+            return Optional.empty();
+        } catch (RuntimeException re) {
+            logger.error("Unexpected runtime error while checking element '{}': {}", name, re.getMessage(), re);
             return Optional.empty();
         }
     }
 
     /**
-     * Safely clears a field and sends keys to it. Wraps common Selenium exceptions into
-     * ElementNotInteractableException so callers can handle uniformly.
+     * Safely sets the value of an input element. Clears existing content and sends keys.
      *
-     * @param element the WebElement to interact with
-     * @param value   the value to send
+     * @param element the target WebElement (assumed non-null and interactable)
+     * @param value   the value to set
      * @param name    logical name for logging
+     * @throws IllegalStateException if interaction with the element fails
      */
-    private void safeClearAndSendKeys(WebElement element, String value, String name) {
+    private void setElementValue(WebElement element, String value, String name) {
         try {
+            logger.debug("Setting value for element '{}'", name);
             element.clear();
             element.sendKeys(value);
-            logger.debug("Set value for '{}': {}", name, value);
-        } catch (ElementNotInteractableException | StaleElementReferenceException | WebDriverException e) {
-            String msg = "Unable to set value for '" + name + "': " + e.getMessage();
-            logger.error(msg, e);
-            throw new ElementNotInteractableException(msg, e);
-        } catch (RuntimeException e) {
-            String msg = "Unexpected error while setting value for '" + name + "': " + e.getMessage();
-            logger.error(msg, e);
-            throw new ElementNotInteractableException(msg, e);
+            logger.debug("Value set for element '{}'", name);
+        } catch (ElementNotInteractableException enie) {
+            String msg = String.format("Element '%s' not interactable when setting value", name);
+            logger.error(msg, enie);
+            throw new IllegalStateException(msg, enie);
+        } catch (StaleElementReferenceException sere) {
+            String msg = String.format("Element '%s' became stale when setting value", name);
+            logger.error(msg, sere);
+            throw new IllegalStateException(msg, sere);
+        } catch (WebDriverException wde) {
+            String msg = String.format("WebDriver error when setting value for element '%s'", name);
+            logger.error(msg, wde);
+            throw new IllegalStateException(msg, wde);
+        } catch (RuntimeException re) {
+            String msg = String.format("Unexpected error when setting value for element '%s'", name);
+            logger.error(msg, re);
+            throw new IllegalStateException(msg, re);
         }
     }
 
     /**
-     * Safely clicks an element. Wraps Selenium exceptions with context.
+     * Safely clicks the given element.
      *
-     * @param element the WebElement to click
+     * @param element the target WebElement (assumed non-null and interactable)
      * @param name    logical name for logging
+     * @throws IllegalStateException if clicking the element fails
      */
-    private void safeClick(WebElement element, String name) {
+    private void clickElement(WebElement element, String name) {
         try {
+            logger.debug("Clicking element '{}'", name);
             element.click();
-            logger.debug("Clicked element '{}'.", name);
-        } catch (ElementNotInteractableException | StaleElementReferenceException | WebDriverException e) {
-            String msg = "Unable to click element '" + name + "': " + e.getMessage();
-            logger.error(msg, e);
-            throw new ElementNotInteractableException(msg, e);
-        } catch (RuntimeException e) {
-            String msg = "Unexpected error while clicking element '" + name + "': " + e.getMessage();
-            logger.error(msg, e);
-            throw new ElementNotInteractableException(msg, e);
+            logger.debug("Clicked element '{}'", name);
+        } catch (ElementNotInteractableException enie) {
+            String msg = String.format("Element '%s' not interactable when clicking", name);
+            logger.error(msg, enie);
+            throw new IllegalStateException(msg, enie);
+        } catch (StaleElementReferenceException sere) {
+            String msg = String.format("Element '%s' became stale when clicking", name);
+            logger.error(msg, sere);
+            throw new IllegalStateException(msg, sere);
+        } catch (WebDriverException wde) {
+            String msg = String.format("WebDriver error when clicking element '%s'", name);
+            logger.error(msg, wde);
+            throw new IllegalStateException(msg, wde);
+        } catch (RuntimeException re) {
+            String msg = String.format("Unexpected error when clicking element '%s'", name);
+            logger.error(msg, re);
+            throw new IllegalStateException(msg, re);
         }
     }
 }

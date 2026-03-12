@@ -43,7 +43,7 @@ public class BaseDB {
      * Marked protected so subclasses can access the raw Connection when necessary.
      * Access to this field is guarded by synchronized methods in this class.
      */
-    protected Connection connection;
+    protected volatile Connection connection;
 
     /**
      * Establishes a database connection using credentials obtained from {@link ConfigManager}.
@@ -116,12 +116,12 @@ public class BaseDB {
         Connection toClose = connection;
         connection = null;
 
-        // Use try-with-resources to guarantee close is attempted.
+        // Use try-with-resources to ensure the connection is closed and to properly handle exceptions.
         try (Connection ignored = toClose) {
-            // No additional action needed; try-with-resources will call close().
-            LOGGER.log(Level.FINE, "Database connection closed via try-with-resources.");
+            // Closing happens automatically by try-with-resources.
+            LOGGER.log(Level.FINE, "Database connection closed successfully.");
         } catch (SQLException ex) {
-            LOGGER.log(Level.SEVERE, "Failed to close database connection.", ex);
+            LOGGER.log(Level.SEVERE, "Error while closing database connection.", ex);
             throw ex;
         } catch (RuntimeException ex) {
             LOGGER.log(Level.SEVERE, "Unexpected error while closing database connection.", ex);
@@ -130,45 +130,30 @@ public class BaseDB {
     }
 
     /**
-     * Returns an Optional containing the live {@link Connection} if present and open.
+     * Returns an Optional containing the active Connection if present and valid.
      *
-     * This method is synchronized because it examines the connection state.
+     * This method does a lightweight validation (checks for null and isClosed()) and will clear the stored
+     * connection reference if the underlying connection is closed or invalid.
      *
-     * @return Optional of Connection if connected; otherwise Optional.empty()
+     * @return Optional containing the active Connection, or Optional.empty() if no valid connection exists
      */
-    public synchronized Optional<Connection> getConnection() {
-        if (Objects.isNull(connection)) {
-            return Optional.empty();
-        }
-        try {
-            if (connection.isClosed()) {
-                // Clear stale reference for safety.
+    public Optional<Connection> getConnection() {
+        synchronized (this) {
+            if (Objects.isNull(connection)) {
+                return Optional.empty();
+            }
+            try {
+                if (connection.isClosed()) {
+                    // Clear stale reference
+                    connection = null;
+                    return Optional.empty();
+                }
+                return Optional.of(connection);
+            } catch (SQLException ex) {
+                LOGGER.log(Level.WARNING, "Error while checking connection validity; clearing reference.", ex);
                 connection = null;
                 return Optional.empty();
             }
-            return Optional.of(connection);
-        } catch (SQLException ex) {
-            LOGGER.log(Level.WARNING, "Error while checking connection state in getConnection(); clearing reference.", ex);
-            connection = null;
-            return Optional.empty();
-        }
-    }
-
-    /**
-     * Helper to determine whether there is an active database connection.
-     *
-     * @return true if connected and connection is open; false otherwise
-     */
-    public synchronized boolean isConnected() {
-        if (Objects.isNull(connection)) {
-            return false;
-        }
-        try {
-            return !connection.isClosed();
-        } catch (SQLException ex) {
-            LOGGER.log(Level.WARNING, "Failed to determine connection state in isConnected(); treating as disconnected.", ex);
-            connection = null;
-            return false;
         }
     }
 }
